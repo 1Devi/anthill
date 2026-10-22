@@ -1,73 +1,181 @@
-# Anthill — Ant Colony Simulator
+# Anthill
 
-A browser strategy sandbox about an ant colony. Workers find food on their own by following
-pheromone trails; you manage the colony, dig the nest underground and fight off spiders and a
-rival red colony.
+**Raise an ant colony from a handful of workers to an underground empire.**
 
-## Running
+Anthill is a small strategy game about ants that runs right in your browser. Your workers find
+food on their own by following scent trails — you decide how the colony grows: what to dig under
+the ground, what to research, how many soldiers to raise and when to go to war with the red
+colony next door.
 
-Open `index.html` in any modern browser (double-click works — no build step, no server, no
-dependencies).
+## How to play
 
-## How it plays
+Open **`index.html`** in Chrome, Edge or Firefox — just double-click it. Nothing to install, no
+internet needed. Pick a difficulty and press **Start colony**.
 
-- **Surface view** — top-down meadow. Searching ants lay a blue "to home" trail, ants carrying
-  food lay a green "to food" trail, and wounded ants release red alarm scent that draws soldiers.
-- **Nest view** (`Tab`) — cross-section of your nest. Dig Granaries (food storage), Nurseries
-  (brood slots) and Living Quarters (population cap). Workers kept inside dig and nurse brood.
-- **Economy** — every ant, larva and the queen eat continuously. The queen turns food into eggs
-  (egg → larva → pupa → ant). Sliders set the forager share and the soldier share of new ants.
-- **Chambers** — Granary (storage), Nursery (brood slots), Living Quarters (population), Fungus Garden
-  (grows food while workers tend it), Infirmary (heals ants at the nest), Guard Post (less raid
-  damage to the queen) and Scent Hall (unlocks research). Digging is paid gradually as it progresses.
-- **Research** (`R`) — 12 topics in four groups (combat, foraging, colony, nest), up to three levels
-  each, run in Scent Halls and paid gradually. Deep Tunnels widens the area you can dig.
-- **Budget** — while digging or research runs, a share of income (the Building budget slider) is set
-  aside for it; eggs use the rest. Everything keeps ~20 s of upkeep in reserve.
-- **Threats** — spiders hunt ants (a dead spider is a big food pile); the red colony grows and
-  raids your nest. You lose if your queen dies; you win by killing the red queen (place a rally
-  point on the red nest to send your soldiers in).
-- **Tools** — drop food (recharges), paint a scent trail, place/erase rocks, set a rally point.
-
-- **Save & load** (`L`) — three slots plus an autosave every minute, kept in browser storage;
-  export a save to a `.json` file or import one back. "Continue" on the start screen resumes the latest save.
-- **Sound** — synthesised with Web Audio (no audio files): wind, rain, crickets at night, digging,
-  bites, spiders, alarms. The speaker button opens mute and volume together; `M` mutes.
-- **Interface** — strategy-game layout. The top resource bar shows food (with the net change per
-  minute: everything brought in minus everything eaten or spent), population, workers, soldiers,
-  brood and the queen; hover any of them for a breakdown. The bottom HUD holds the minimap
-  (click or drag to move the camera), the selected unit with its portrait, colony orders and the
-  command grid (`1`–`6` on the surface, `1`–`3` to pick a chamber in the nest view).
-- **Map size** — the meadow is 2400×1500 and the nest cross-section 2000×1200; both views pan
-  (drag / WASD) and zoom (wheel). Sizes live in `CFG.WORLD_W/H` and `CFG.NEST`; saves remember theirs.
-
-Controls: right-drag or WASD to pan, wheel to zoom, `Space` pause, `F` cycle speed,
-`1`–`6` commands, `[` `]` brush size, `P` trails, `L` save/load, `M` mute, `H` help, `Esc` back to Inspect.
-
-## Code layout
-
-| File | Purpose |
+| Difficulty | What to expect |
 | --- | --- |
-| `js/config.js` | All tunable numbers (castes, chambers, difficulty) |
-| `js/world.js` | Terrain, pheromone grids, food, combat, events |
-| `js/ant.js`, `js/spider.js` | Agent behaviour |
-| `js/colony.js` | Economy, brood, task allocation, rival AI |
-| `js/nest.js` | Underground chambers and digging |
-| `js/save.js` | Save/load serialisation and localStorage slots |
-| `js/audio.js` | Procedural Web Audio sound effects and ambience |
-| `js/minimap.js` | Minimap overlay |
-| `js/sprites.js`, `js/render-*.js` | Procedural graphics |
-| `js/ui.js`, `js/game.js` | Panel/dialogs, input, camera, main loop |
+| **Peaceful** | No enemies. Watch the colony grow and experiment. |
+| **Normal** | A rival red colony and the occasional hungry spider. |
+| **Hard** | A stronger rival that attacks sooner, and more spiders. |
 
-`node tests/sim-test.js [peaceful|normal|hard] [minutes] [seed]` runs the simulation headless
-and prints colony stats every game minute — handy when tweaking balance.
-`node tests/save-test.js` checks that a save loads back identically.
+You lose if your queen dies or every ant is gone. On Normal and Hard you win by destroying the
+red colony's queen.
 
-## Balancing
+## Your colony
 
-Open `balance.html` next to `index.html`. It reads `js/config.js` directly and shows every number
-with derived metrics: lifetime cost of each caste, forager yield by distance, dig times, research
-costs, spider scaling, raid sizes and how long the queen lasts, difficulty side by side and all
-constants. Every table has a “Copy CSV” button for spreadsheets. The Simulation section runs the
-real game headless with a scripted player (`js/autoplayer.js`) over several seeds and prints
-per-minute averages — change a number in `config.js`, reload, run, compare.
+**Ants find food by themselves.** Searching ants leave a **blue** scent that leads home; ants
+carrying food leave a **green** one that leads back to the food. Others follow these scents, so
+busy ant roads appear on their own. Wounded ants release a **red** alarm scent that calls
+soldiers. Rain washes trails away. If a trail leads nowhere, ants eventually give up on it and
+explore elsewhere.
+
+**Three kinds of ants:**
+
+- **Workers** gather food. Some of them stay inside the nest to nurse the brood, dig chambers and
+  tend gardens — the young ones; old workers go out to forage.
+- **Soldiers** guard the nest, fight spiders and raiders, and go wherever you place a rally point.
+- **The queen** lays the eggs. Egg → larva → pupa → ant takes about half a minute. Protect her: if
+  she dies, the game is over.
+
+**Food is everything.** Every ant, every larva and the queen eat all the time. The resource bar at
+the top shows how much food you have and your **net income per minute** — hover over it to see
+what comes in (foraging, gardens) and what goes out (eating, eggs, digging, research). The queen
+lays eggs on her own as long as there is food to spare.
+
+## The nest
+
+Press **Tab** (or the *Nest* button) to look at your nest in cross-section. Pick a chamber in the
+bottom-right panel and click the soil to dig it. Workers inside dig it out; the cost is paid little
+by little as they dig.
+
+| Chamber | What it does |
+| --- | --- |
+| **Granary** | Stores more food |
+| **Nursery** | Room for more eggs and larvae |
+| **Living Quarters** | Raises the population limit |
+| **Fungus Garden** | Grows food on its own while two workers tend it |
+| **Infirmary** | Wounded ants near the nest heal |
+| **Guard Post** | The queen takes less damage during raids |
+| **Scent Hall** | Unlocks research; more halls research faster |
+
+You can only dig close to the existing tunnels and inside the lit area — research **Deep Tunnels**
+to open up more of the underground.
+
+## Research
+
+Build a **Scent Hall**, then press **R**. Twelve upgrades in four groups, many with several levels:
+
+- **Combat** — stronger bites, tougher armour, drilled soldiers.
+- **Foraging** — faster legs, keener antennae, longer-lasting trails, bigger loads.
+- **Colony** — a more fertile queen, longer-living ants.
+- **Nest** — faster digging, richer fungus gardens, Deep Tunnels.
+
+Research is paid gradually while it runs and pauses when you run out of spare food.
+
+## Orders
+
+The **Colony orders** panel at the bottom sets how the colony behaves:
+
+- **Foragers** — how many workers go outside. The rest work inside (nursing, digging, gardens).
+  At 100% nobody works in the nest!
+- **Soldiers among new ants** — how many of the new ants become soldiers.
+- **Building budget** — while something is being dug or researched, this share of the incoming
+  food is set aside for it; the rest goes to new eggs.
+- **Auto-lay**, plus buttons to lay a worker or soldier egg right now, and **Recall** to call
+  soldiers back home.
+
+## Tools
+
+| Tool | Key | What it does |
+| --- | --- | --- |
+| Inspect | 1 | Click an ant, spider, food pile or nest to see details |
+| Drop food | 2 | Drops a pile of sugar (needs time to recharge) |
+| Scent trail | 3 | Paint a food scent — ants follow it in the direction you drag |
+| Rocks | 4 | Place rocks; ants walk around them |
+| Erase | 5 | Remove rocks and your scent marks |
+| Rally point | 6 | Send soldiers somewhere. Put it on the red nest to raid it |
+
+## Dangers
+
+- **Spiders** wander in from the edges and eat ants. A crowd of ants can bring one down — the
+  carcass is a feast.
+- **The red colony** grows just like yours. From about the tenth minute it starts sending raiding
+  parties to your nest, a little bigger each time. Keep some soldiers, dig Guard Posts, and when
+  you are strong enough, raid them back.
+- **Night** falls every couple of minutes; **rain** washes away the scent trails.
+
+## Controls
+
+| Action | Mouse / keyboard |
+| --- | --- |
+| Move the view | Right-drag, drag with Inspect, or W A S D / arrows |
+| Zoom | Mouse wheel |
+| Switch surface / nest | Tab |
+| Pause / speed | Space / F (or the buttons at the top) |
+| Commands | 1 – 6 on the surface, 1 – 7 to pick a chamber in the nest |
+| Brush size | [ and ] |
+| Research | R |
+| Save / load | L |
+| Pheromone trails on/off | P |
+| Mute | M |
+| Help | H |
+| Cancel / deselect | Esc, right-click |
+
+Click or drag on the **minimap** to jump around the meadow.
+
+**On a phone or tablet:** drag with one finger to move, pinch to zoom, tap to select or use a tool,
+and press and hold instead of right-clicking (cancel, recall soldiers, deselect). In the nest, the
+first tap shows where a chamber would go and a second tap places it. The bottom panel has four
+pages — minimap, selection, orders, commands — swipe sideways or tap the dots. Saving, display,
+sound and help are under the **⋯** button.
+
+## Saving
+
+The game **saves itself every minute**. Press **L** for three save slots, and to export a save to
+a file or load one back. On the start screen, **Continue** resumes your latest game. Saves live
+in your browser, so clearing site data removes them — export the important ones.
+
+## Tips
+
+- Early on, dig **Living Quarters** and a **Nursery** — the starting nest fills up fast.
+- If the food number in the bar is red, stop digging or researching for a while, or lower the
+  building budget.
+- Before minute ten, raise a few more soldiers and dig a **Guard Post**.
+- A **Fungus Garden** is a steady income that no spider can steal.
+- Hover anything in the resource bar for a breakdown of where the numbers come from.
+
+## Questions
+
+**There's no sound.** Browsers only start audio after you click or press a key. Check the
+speaker button at the top.
+
+**The game is slow.** Lower the speed, or hide pheromone trails with **P**.
+
+**Where are the save files?** In your browser's storage for this page. Use *Export to file* to keep
+a copy.
+
+## Roadmap
+
+What's coming next, roughly in this order:
+
+- [x] **Touch controls** — play on a phone or tablet: drag to move, pinch to zoom, a layout that fits
+  small screens.
+- [ ] **Chronicle** — graphs of your population and food over the whole game, on the end screen and
+  any time from the top bar.
+- [ ] **Map settings** — choose the map size, how much food and how many rocks there are, and fight
+  up to three rival colonies.
+- [ ] **Seasons and winter** — plenty of food in spring and summer, less in autumn; in winter
+  nothing grows and the colony lives on its stores.
+- [ ] **Scouts** — a fast new caste that explores far away and marks the food it finds.
+- [ ] **Fog of war** — you only see what your ants see. Scouts and patrols become essential.
+- [ ] **Aphids and ladybugs** — herd aphids on plants and milk them for honeydew; defend them from
+  ladybugs and the red colony.
+- [ ] **Scenarios** — *Survive three winters*, *Hold five aphid herds*, *Destroy two colonies*.
+
+Ideas for later: more castes (big carriers, honeypot ants, winged queens that found new nests),
+more creatures (antlions, beetles, birds, floods), different ant species to play, direct control
+of soldier squads, a short tutorial, and a Russian translation.
+
+---
+
+Want to tinker with the game itself? See [DEVELOPMENT.md](DEVELOPMENT.md).

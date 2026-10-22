@@ -1,7 +1,7 @@
 'use strict';
 // Game shell: canvas sizing, camera, input, tools and the fixed-step main loop.
 
-const TOP_H = 52;
+const LONG_PRESS = 550; // ms a finger must rest to count as a right-click
 
 class Game {
   constructor() {
@@ -24,6 +24,12 @@ class Game {
     this.show = { phero: true, rival: false };
     this.cam = { x: 0, y: 0, zoom: 1, min: 0.3, max: 6 };
     this.ptr = null; // active pointer drag
+    this.touches = new Map(); // fingers on the canvas, for pinch-zoom
+    this.pinch = null;
+    this.pressTimer = 0;
+    this.pendingPlace = null; // touch: first tap previews a chamber, the second places it
+    this.topH = 52;
+    this.hudH = 0;
     this.hover = false;
     this.mouseScreen = null;
     this.mouseWorld = null;
@@ -106,7 +112,7 @@ class Game {
 
   // Visible play area between the resource bar and the bottom HUD, in CSS pixels.
   areaRect() {
-    return [0, TOP_H, this.vw, this.vh - TOP_H - this.hudH];
+    return [0, this.topH, this.vw, this.vh - this.topH - this.hudH];
   }
 
   onResize() {
@@ -115,6 +121,7 @@ class Game {
     this.vh = window.innerHeight;
     const hud = document.getElementById('hud');
     this.hudH = this.app.classList.contains('hud-hidden') ? 0 : hud.offsetHeight;
+    this.topH = document.getElementById('topbar').offsetHeight;
     this.canvas.width = Math.round(this.vw * this.dpr);
     this.canvas.height = Math.round(this.vh * this.dpr);
     if (this.world) {
@@ -180,6 +187,7 @@ class Game {
 
   setBuild(type) {
     this.buildType = type;
+    this.pendingPlace = null;
     this.ui.setBuild(type);
   }
 
@@ -197,6 +205,12 @@ class Game {
     cv.addEventListener('pointerdown', (e) => this.onDown(e));
     window.addEventListener('pointermove', (e) => this.onMove(e));
     window.addEventListener('pointerup', (e) => this.onUp(e));
+    window.addEventListener('pointercancel', (e) => {
+      this.touches.delete(e.pointerId);
+      this.pinch = null;
+      this.ptr = null;
+      clearTimeout(this.pressTimer);
+    });
     cv.addEventListener('pointerenter', () => (this.hover = true));
     cv.addEventListener('pointerleave', () => {
       this.hover = false;
@@ -222,10 +236,56 @@ class Game {
     if (!this.world || this.demo) return;
     this.hover = true;
     this.canvas.setPointerCapture(e.pointerId);
+    // The first finger of a new gesture starts a fresh list, so a lost pointerup can't leave a ghost finger behind.
+    if (e.isPrimary) {
+      this.touches.clear();
+      this.pinch = null;
+    }
+    this.touches.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+    if (this.touches.size >= 2) {
+      // A second finger turns the gesture into pinch-zoom and drops what the first one was doing.
+      this.ptr = null;
+      clearTimeout(this.pressTimer);
+      this.pinch = this.pinchState();
+      return;
+    }
+    const touch = e.pointerType === 'touch';
     const leftPans = this.view === 'surface' ? this.tool === 'inspect' : !this.buildType;
     const pan = e.button === 1 || e.button === 2 || (e.button === 0 && leftPans);
-    this.ptr = { id: e.pointerId, button: e.button, sx: e.offsetX, sy: e.offsetY, lx: e.offsetX, ly: e.offsetY, moved: false, pan, stroke: 0 };
+    this.ptr = { id: e.pointerId, button: e.button, sx: e.offsetX, sy: e.offsetY, lx: e.offsetX, ly: e.offsetY, moved: false, pan, stroke: 0, touch };
+    if (touch) {
+      // A long press works like a right-click: cancel, recall, deselect.
+      clearTimeout(this.pressTimer);
+      this.pressTimer = setTimeout(() => {
+        const p = this.ptr;
+        if (!p || p.id !== e.pointerId || p.moved) return;
+        p.handled = true;
+        this.secondaryAction(p.sx, p.sy);
+        if (navigator.vibrate) navigator.vibrate(15);
+      }, LONG_PRESS);
+    }
     if (e.button === 0 && this.view === 'surface' && !pan) this.applyTool(e.offsetX, e.offsetY, true);
+  }
+
+  pinchState() {
+    const [a, b] = [...this.touches.values()];
+    return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  }
+
+  // Right-click, or a long press on touch screens.
+  secondaryAction(sx, sy) {
+    if (this.view === 'surface') {
+      if (this.tool === 'rally') this.recall();
+      else if (this.tool !== 'inspect') this.setTool('inspect');
+      else this.selected = null;
+      return;
+    }
+    const m = this.nestR.toNest(sx, sy), nest = this.world.player.nest;
+    const c = nest.chamberAt(m.x, m.y);
+    if (c && !c.built) {
+      const why = nest.cancel(c.id);
+      this.ui.toast(why || `${CFG.CHAMBERS[c.type].name} cancelled.`, why ? 'warn' : 'info');
+    } else this.setBuild(null);
   }
 
   onMove(e) {
@@ -233,6 +293,21 @@ class Game {
     const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
     this.mouseScreen = { x: sx, y: sy };
     if (!this.world) return;
+    if (this.touches.has(e.pointerId)) this.touches.set(e.pointerId, { x: sx, y: sy });
+    if (this.pinch && this.touches.size >= 2) {
+      const now = this.pinchState(), f = now.d / this.pinch.d;
+      if (this.view === 'surface') {
+        this.zoomAt(now.mx, now.my, f);
+        this.cam.x -= (now.mx - this.pinch.mx) / this.cam.zoom;
+        this.cam.y -= (now.my - this.pinch.my) / this.cam.zoom;
+        this.clampCam();
+      } else {
+        this.nestR.zoomAt(now.mx, now.my, f);
+        this.nestR.pan(now.mx - this.pinch.mx, now.my - this.pinch.my);
+      }
+      this.pinch = now;
+      return;
+    }
     this.mouseWorld = this.screenToWorld(sx, sy);
     if (this.view === 'nest') {
       this.mouseNest = this.nestR.toNest(sx, sy);
@@ -243,7 +318,7 @@ class Game {
     }
     const p = this.ptr;
     if (!p || p.id !== e.pointerId) return;
-    if (Math.hypot(sx - p.sx, sy - p.sy) > 4) p.moved = true;
+    if (Math.hypot(sx - p.sx, sy - p.sy) > (p.touch ? 9 : 4)) p.moved = true;
     if (p.pan && this.view === 'nest') {
       this.nestR.pan(sx - p.lx, sy - p.ly);
     } else if (p.pan && this.view === 'surface') {
@@ -264,32 +339,38 @@ class Game {
   }
 
   onUp(e) {
+    this.touches.delete(e.pointerId);
+    if (this.pinch) {
+      if (this.touches.size < 2) this.pinch = null;
+      this.ptr = null;
+      return;
+    }
+    clearTimeout(this.pressTimer);
     const p = this.ptr;
     if (!p || p.id !== e.pointerId) return;
     this.ptr = null;
-    if (p.moved) return;
+    if (p.moved || p.handled) return;
     const sx = p.sx, sy = p.sy;
-    if (this.view === 'surface') {
-      if (p.button === 2) {
-        if (this.tool === 'rally') this.recall();
-        else this.setTool('inspect');
-      } else if (p.button === 0 && this.tool === 'inspect') {
+    if (p.button === 2) {
+      this.secondaryAction(sx, sy);
+    } else if (this.view === 'surface') {
+      if (p.button === 0 && this.tool === 'inspect') {
         const m = this.screenToWorld(sx, sy);
         this.selected = this.world.pickAt(m.x, m.y);
       }
-    } else {
+    } else if (p.button === 0 && this.buildType) {
       const m = this.nestR.toNest(sx, sy), nest = this.world.player.nest;
-      if (p.button === 0 && this.buildType) {
-        const r = nest.order(this.buildType, m.x, m.y);
-        if (!r.ok) this.ui.toast(r.reason, 'warn');
-        else if (!e.shiftKey) this.setBuild(null);
-      } else if (p.button === 2) {
-        const c = nest.chamberAt(m.x, m.y);
-        if (c && !c.built) {
-          const why = nest.cancel(c.id);
-          this.ui.toast(why || `${CFG.CHAMBERS[c.type].name} cancelled.`, why ? 'warn' : 'info');
-        } else this.setBuild(null);
+      const pend = this.pendingPlace;
+      if (p.touch && (!pend || dist(pend.x, pend.y, m.x, m.y) > 30 / this.nestR.view.s)) {
+        // Touch has no hover: the first tap shows where the chamber would go, a second tap there places it.
+        this.pendingPlace = m;
+        this.mouseNest = m;
+        return;
       }
+      this.pendingPlace = null;
+      const r = nest.order(this.buildType, m.x, m.y);
+      if (!r.ok) this.ui.toast(r.reason, 'warn');
+      else if (!e.shiftKey) this.setBuild(null);
     }
   }
 

@@ -32,7 +32,7 @@ kbd {
 }
 .hidden { display: none !important; }
 
-#app { position: fixed; inset: 0; }
+#app { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 #game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
 
 .logo {
@@ -375,12 +375,50 @@ input[type="range"] { width: 100%; accent-color: var(--amber); margin: 4px 0 0; 
 @media (max-width: 1060px) {
   .brand, #btn-help { display: none; }
 }
+/* ---------- phones ---------- */
+.phone-only { display: none; }
+#game { touch-action: none; }
+button { -webkit-tap-highlight-color: transparent; }
+.more-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#more-pop { width: 220px; }
+
 @media (max-width: 760px) {
-  :root { --hud-h: 150px; }
-  .brand, #r-workers, #r-soldiers, #r-brood { display: none; }
-  .top-right { gap: 4px; }
-  #speeds button { padding: 6px 7px; }
-  .hud-map, .hud-orders { display: none; }
+  :root { --top-h: 92px; --hud-h: 182px; }
+  html, body { overscroll-behavior: none; }
+  /* Two rows on top: resources, then view / speed / menu. */
+  #topbar { flex-wrap: wrap; align-content: center; row-gap: 6px; padding: 6px 8px; gap: 6px; }
+  .brand, .clock, #r-brood .sub, #btn-saves, #btn-settings, #btn-sound, #btn-help { display: none; }
+  .phone-only { display: block; }
+  .resources { width: 100%; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+  .res { height: 34px; padding: 0 6px 0 4px; gap: 4px; flex: 1 0 auto; }
+  .res .res-text { width: auto !important; }
+  .res .val { font-size: 13.5px; }
+  .ico, .ico svg { width: 18px; height: 18px; flex-basis: 18px; }
+  .top-right { width: 100%; margin-left: 0; gap: 6px; }
+  #views button, #speeds button { padding: 6px 9px; }
+  #btn-panel { margin-left: auto; }
+  .round { width: 30px; height: 30px; flex-basis: 30px; }
+  /* The HUD becomes a swipeable strip: map, selection, orders, commands. */
+  #hud { scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x; }
+  .hud-block { flex: 0 0 100vw !important; min-width: 0 !important; scroll-snap-align: start; border-right: 0; }
+  .hud-map { display: grid; }
+  #minimap { width: min(220px, 70vw); }
+  #hud-dots { position: absolute; right: 12px; bottom: calc(var(--hud-h) - 18px); z-index: 5; display: flex; gap: 6px; }
+  #app.hud-hidden #hud-dots { display: none; }
+  #hud-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 220, 170, 0.25); }
+  #hud-dots i.on { background: var(--amber); }
+  .hud-sel { flex-direction: row; }
+  .portrait { width: 90px; height: 90px; }
+  .portrait canvas { width: 86px; height: 86px; }
+  .hud-orders .row { flex-wrap: wrap; }
+  .cmd-grid, .cmd-grid.wide { grid-template-columns: repeat(4, 1fr); }
+  #log { bottom: calc(var(--hud-h) + 8px); width: calc(100vw - 24px); }
+  .msg { font-size: 12px; padding: 5px 9px; }
   .cols { grid-template-columns: 1fr; }
   .tech-groups { grid-template-columns: 1fr 1fr; }
+  .dialog { padding: 20px 18px; }
+}
+@media (max-width: 480px) {
+  .tech-groups { grid-template-columns: 1fr; }
+  .dialog h1 { font-size: 28px; }
 }

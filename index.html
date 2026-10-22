@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Anthill — Ant Colony Simulator</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -56,9 +56,19 @@
       <button id="btn-settings" class="round" title="Display &amp; sound"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
       <button id="btn-sound" class="round" title="Sound"></button>
       <button id="btn-help" class="round" title="Help (H)">?</button>
+      <button id="btn-more" class="round phone-only" title="More">⋯</button>
       <button id="btn-panel" class="round" title="Show / hide the bottom panel">☰</button>
     </div>
   </header>
+
+  <div id="more-pop" class="popover hidden">
+    <div class="more-grid">
+      <button class="btn" data-proxy="btn-saves">Save / load</button>
+      <button class="btn" data-proxy="btn-settings">Display</button>
+      <button class="btn" data-proxy="btn-sound">Sound</button>
+      <button class="btn" data-proxy="btn-help">Help</button>
+    </div>
+  </div>
 
   <div id="settings" class="popover hidden">
     <h3>Display</h3>
@@ -116,6 +126,7 @@
     </section>
   </footer>
 
+  <div id="hud-dots" class="phone-only"><i class="on"></i><i></i><i></i><i></i></div>
   <div id="log"></div>
   <div id="tooltip" class="hidden"></div>
 

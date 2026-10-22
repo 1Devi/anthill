@@ -102,8 +102,26 @@ class UI {
     };
     this.$('btn-settings').onclick = () => this.togglePopover('settings', 'btn-settings');
     this.$('btn-sound').onclick = () => this.togglePopover('sound-pop', 'btn-sound');
+    // Phones: the HUD pages swipe sideways; the dots show and switch the page.
+    const hud = this.$('hud'), dots = [...this.$('hud-dots').children];
+    hud.addEventListener('scroll', () => {
+      const i = Math.round(hud.scrollLeft / Math.max(1, hud.clientWidth));
+      dots.forEach((d, k) => d.classList.toggle('on', k === i));
+    });
+    dots.forEach((d, k) => d.addEventListener('click', () => hud.scrollTo({ left: k * hud.clientWidth, behavior: 'smooth' })));
+    // Phones: the less used buttons live in a "more" menu that forwards to them.
+    this.$('btn-more').onclick = () => this.togglePopover('more-pop', 'btn-more');
+    this.$('more-pop').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-proxy]');
+      if (!b) return;
+      this.closePopovers();
+      const id = b.dataset.proxy;
+      if (id === 'btn-settings') this.togglePopover('settings', 'btn-more');
+      else if (id === 'btn-sound') this.togglePopover('sound-pop', 'btn-more');
+      else this.$(id).click();
+    });
     document.addEventListener('pointerdown', (e) => {
-      if (!e.target.closest('.popover, #btn-settings, #btn-sound')) this.closePopovers();
+      if (!e.target.closest('.popover, #btn-settings, #btn-sound, #btn-more')) this.closePopovers();
     });
 
     const forage = this.$('s-forage'), soldier = this.$('s-soldier');
@@ -358,7 +376,7 @@ class UI {
   }
 
   closePopovers() {
-    for (const [id, btn] of [['settings', 'btn-settings'], ['sound-pop', 'btn-sound']]) {
+    for (const [id, btn] of [['settings', 'btn-settings'], ['sound-pop', 'btn-sound'], ['more-pop', 'btn-more']]) {
       this.$(id).classList.add('hidden');
       this.$(btn).classList.remove('active');
     }
@@ -449,7 +467,8 @@ class UI {
     el.className = 'msg ' + kind;
     el.textContent = text;
     log.appendChild(el);
-    while (log.children.length > 5) log.firstChild.remove();
+    // Phones show fewer messages so the log doesn't cover the meadow.
+    while (log.children.length > (window.innerWidth <= 760 ? 2 : 5)) log.firstChild.remove();
     setTimeout(() => el.classList.add('fade'), 7000);
     setTimeout(() => el.remove(), 7700);
   }

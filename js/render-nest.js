@@ -305,7 +305,7 @@ class NestRenderer {
     this.drawResidents(ctx, n, col, g.world.time);
     for (const ag of this.agents) Sprites.draw(ctx, 'player', 'worker', (ag.anim | 0) & 3, ag.x, ag.y, ag.a, ANT_SCALE);
     this.drawLabels(ctx, n, g);
-    if (g.buildType && g.mouseNest && g.hover) this.drawGhost(ctx, n, g);
+    if (g.buildType && g.mouseNest && (g.hover || g.pendingPlace)) this.drawGhost(ctx, n, g);
   }
 
   drawSky(ctx, g, n) {
@@ -668,7 +668,7 @@ class NestRenderer {
   }
 
   drawGhost(ctx, n, g) {
-    const m = g.mouseNest, T = CFG.CHAMBERS[g.buildType];
+    const m = g.pendingPlace || g.mouseNest, T = CFG.CHAMBERS[g.buildType];
     const r = n.canPlace(g.buildType, m.x, m.y);
     const color = r.ok ? '120,230,120' : '255,110,90';
     if (r.parent) {
