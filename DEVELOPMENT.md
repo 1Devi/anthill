@@ -52,7 +52,8 @@ Checks that a save loads back identically, including research, and that old-form
 
 The game is published to GitHub Pages by `.github/workflows/pages.yml` on every push to `main`
 (or by hand from the Actions tab). It copies only what the browser needs — `index.html`,
-`balance.html`, `css/` and `js/` — into `_site` and deploys that.
+`balance.html`, the icons (`favicon.svg`, `apple-touch-icon.png`), `css/` and `js/` — into `_site`
+and deploys that. Add any new top-level file the pages load to that list.
 
 One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**. With the
 old "Deploy from a branch" source, GitHub runs its own `pages-build-deployment` workflow instead,

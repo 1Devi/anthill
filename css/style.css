@@ -40,7 +40,7 @@ kbd {
   width: 24px; height: 24px;
   margin: 0 8px 0 2px;
   vertical-align: -6px;
-  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><g stroke='%23e8b04a' stroke-width='1.2' stroke-linecap='round' fill='none'><path d='M12 12L9 6.5M12 12L12.5 5.5M12 12L15.5 6.5M12 12L9 17.5M12 12L12.5 18.5M12 12L15.5 17.5M18.5 11.2L21.5 8M18.5 12.8L21.5 16'/></g><g fill='%23e8b04a'><ellipse cx='6' cy='12' rx='4.2' ry='3'/><ellipse cx='12' cy='12' rx='2.6' ry='1.7'/><ellipse cx='17.2' cy='12' rx='2.2' ry='2'/></g></svg>") no-repeat center / contain;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><g stroke='%23e8b04a' stroke-width='1.2' stroke-linecap='round' fill='none'><path d='M12 12L9 6.5M12 12L12.5 5.5M12 12L15.5 6.5M12 12L9 17.5M12 12L12.5 18.5M12 12L15.5 17.5M18.9 11.1L21.7 8M18.9 12.9L21.7 16'/></g><g fill='%23e8b04a'><ellipse cx='6' cy='12' rx='4.2' ry='3.0'/><ellipse cx='12.2' cy='12' rx='3.0' ry='1.9'/><ellipse cx='17.4' cy='12' rx='2.4' ry='2.1'/></g></svg>") no-repeat center / contain;
 }
 .logo.big { width: 52px; height: 52px; margin: 0 14px 0 0; }
 

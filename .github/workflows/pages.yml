@@ -23,11 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Only what the browser needs: the game, the balance sheet, styles and scripts.
+      # Only what the browser needs: the game, the balance sheet, icons, styles and scripts.
       - name: Collect site files
         run: |
           mkdir -p _site
-          cp -r index.html balance.html css js _site/
+          cp -r index.html balance.html favicon.svg apple-touch-icon.png css js _site/
 
       - uses: actions/configure-pages@v6
 
