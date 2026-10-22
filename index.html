@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anthill — Ant Colony Simulator</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <!-- Resource bar -->
+  <header id="topbar">
+    <div class="brand"><span class="logo"></span><span class="brand-name">Anthill</span></div>
+    <div class="resources">
+      <div class="res" id="r-food">
+        <i class="ico c-food"><svg viewBox="0 0 24 24"><path d="M12 3c4.5 3.5 6 9 0 18c-6-9-4.5-14.5 0-18z" fill="currentColor"/><path d="M12 8v9" stroke="rgba(0,0,0,0.35)" stroke-width="1.4" stroke-linecap="round"/></svg></i>
+        <div class="res-text"><b class="val"></b><span class="sub"></span></div>
+      </div>
+      <div class="res" id="r-pop">
+        <i class="ico c-pop"><svg viewBox="0 0 24 24"><path d="M2 19c3-8 7-11 10-11s7 3 10 11z" fill="currentColor"/><ellipse cx="12" cy="15.5" rx="2.4" ry="1.7" fill="#1b120b"/></svg></i>
+        <div class="res-text"><b class="val"></b><span class="sub">population</span></div>
+      </div>
+      <div class="res" id="r-workers">
+        <i class="ico c-worker"><svg viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"><path d="M12 12L9 6.5M12 12L12.5 5.5M12 12L15.5 6.5M12 12L9 17.5M12 12L12.5 18.5M12 12L15.5 17.5M18.5 11.2L21.5 8M18.5 12.8L21.5 16"/></g><g fill="currentColor"><ellipse cx="6" cy="12" rx="4.2" ry="3"/><ellipse cx="12" cy="12" rx="2.6" ry="1.7"/><ellipse cx="17.2" cy="12" rx="2.2" ry="2"/></g></svg></i>
+        <div class="res-text"><b class="val"></b><span class="sub"></span></div>
+      </div>
+      <div class="res" id="r-soldiers">
+        <i class="ico c-soldier"><svg viewBox="0 0 24 24"><path d="M12 3l7.5 3v6c0 4.6-3.2 7.7-7.5 9.2C7.7 19.7 4.5 16.6 4.5 12V6z" fill="currentColor"/><path d="M9 10l3 3 3-3M12 13v4" stroke="#1b120b" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></i>
+        <div class="res-text"><b class="val"></b><span class="sub"></span></div>
+      </div>
+      <div class="res" id="r-brood">
+        <i class="ico c-brood"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="13" rx="6" ry="8" fill="currentColor"/><ellipse cx="10" cy="9.5" rx="1.6" ry="2.4" fill="rgba(255,255,255,0.6)"/></svg></i>
+        <div class="res-text"><b class="val"></b><span class="sub"></span></div>
+      </div>
+      <div class="res" id="r-queen">
+        <i class="ico c-queen"><svg viewBox="0 0 24 24"><path d="M3 17l1.5-10 4.5 4 3-6 3 6 4.5-4L21 17z" fill="currentColor"/><rect x="3" y="18.5" width="18" height="2.2" rx="1" fill="currentColor"/></svg></i>
+        <div class="res-text"><b class="val"></b><span class="sub"><span class="hp"><i></i></span></span></div>
+      </div>
+    </div>
+    <div class="top-right">
+      <div class="clock"><span id="clock"></span><span id="weather"></span></div>
+      <div class="seg" id="views">
+        <button data-view="surface" class="active">Surface</button>
+        <button data-view="nest">Nest</button>
+      </div>
+      <div class="seg" id="speeds">
+        <button data-speed="0" title="Pause (Space)">❚❚</button>
+        <button data-speed="1" class="active">1×</button>
+        <button data-speed="2">2×</button>
+        <button data-speed="4">4×</button>
+      </div>
+      <button id="btn-research" class="round" title="Research (R)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/></svg><i class="rprog"></i></button>
+      <button id="btn-saves" class="round" title="Save / load (L)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg></button>
+      <button id="btn-settings" class="round" title="Display &amp; sound"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
+      <button id="btn-sound" class="round" title="Sound"></button>
+      <button id="btn-help" class="round" title="Help (H)">?</button>
+      <button id="btn-panel" class="round" title="Show / hide the bottom panel">☰</button>
+    </div>
+  </header>
+
+  <div id="settings" class="popover hidden">
+    <h3>Display</h3>
+    <label class="check"><input type="checkbox" id="c-phero" checked> Your pheromone trails <kbd>P</kbd></label>
+    <label class="check"><input type="checkbox" id="c-rival"> Rival trails</label>
+    <div class="legend"><span class="sw home"></span>to home <span class="sw food"></span>to food <span class="sw alarm"></span>alarm</div>
+  </div>
+
+  <div id="sound-pop" class="popover hidden">
+    <h3>Sound</h3>
+    <div class="vol-row">
+      <button id="b-mute" class="round" title="Mute / unmute (M)"></button>
+      <input type="range" id="s-volume" min="0" max="100" value="60">
+      <b id="v-volume">60%</b>
+    </div>
+  </div>
+
+  <!-- Bottom HUD -->
+  <footer id="hud">
+    <div class="hud-block hud-map">
+      <canvas id="minimap" title="Click or drag to move the camera"></canvas>
+    </div>
+
+    <section class="hud-block hud-sel">
+      <div class="portrait"><canvas id="portrait" width="128" height="128"></canvas></div>
+      <div class="sel-body" id="sel-body"></div>
+    </section>
+
+    <section class="hud-block hud-orders">
+      <h3>Colony orders</h3>
+      <div class="slider">
+        <label>Foragers <b id="v-forage">75%</b></label>
+        <input type="range" id="s-forage" min="30" max="100" value="75" title="The rest stay inside to nurse brood and dig">
+      </div>
+      <div class="slider">
+        <label>Soldiers among new ants <b id="v-soldier">15%</b></label>
+        <input type="range" id="s-soldier" min="0" max="60" value="15">
+      </div>
+      <div class="slider">
+        <label title="Share of incoming food set aside for digging and research while they run">Building budget <b id="v-build">40%</b></label>
+        <input type="range" id="s-build" min="10" max="90" value="40">
+      </div>
+      <div class="row">
+        <label class="check" title="The queen keeps laying eggs while food allows"><input type="checkbox" id="c-lay" checked> Auto-lay</label>
+        <button id="b-egg-w" class="btn">+ Worker <small>6</small></button>
+        <button id="b-egg-s" class="btn">+ Soldier <small>18</small></button>
+        <button id="b-recall" class="btn" title="Cancel the rally point">Recall</button>
+      </div>
+    </section>
+
+    <section class="hud-block hud-cmd">
+      <h3 id="cmd-title">Tools</h3>
+      <div class="cmd-grid" id="cmd-grid"></div>
+      <p class="cmd-hint" id="cmd-hint"></p>
+    </section>
+  </footer>
+
+  <div id="log"></div>
+  <div id="tooltip" class="hidden"></div>
+
+  <div class="overlay" id="start">
+    <div class="dialog">
+      <div class="title"><span class="logo big"></span><h1>Anthill</h1></div>
+      <p class="lead">Guide a young ant colony. Your workers find food on their own by following pheromone trails — you decide how the colony grows, what to dig underground and when to go to war.</p>
+      <div class="diffs" id="diffs"></div>
+      <button id="b-start" class="btn primary">Start colony</button>
+      <div class="row" id="start-saves">
+        <button id="b-resume" class="btn hidden">Continue</button>
+        <button id="b-load-menu" class="btn">Load game…</button>
+      </div>
+      <p class="keys">Drag with right mouse or WASD to pan · wheel to zoom · <kbd>Tab</kbd> surface/nest · <kbd>Space</kbd> pause · <kbd>1</kbd>–<kbd>6</kbd> commands · <kbd>L</kbd> save/load</p>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="end">
+    <div class="dialog">
+      <h2 id="end-title"></h2>
+      <p id="end-text" class="lead"></p>
+      <div class="stats" id="end-stats"></div>
+      <div class="row center">
+        <button id="b-continue" class="btn primary">Keep playing</button>
+        <button id="b-restart" class="btn">New game</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="saves">
+    <div class="dialog">
+      <h2>Save &amp; load</h2>
+      <p class="hint">The game autosaves every minute. Saves live in this browser; export one to keep it as a file.</p>
+      <div class="slots" id="slots"></div>
+      <div class="row">
+        <button id="b-export" class="btn">Export to file</button>
+        <button id="b-import" class="btn">Import from file</button>
+        <input type="file" id="f-import" accept=".json,application/json" hidden>
+      </div>
+      <div class="row center"><button id="b-saves-close" class="btn primary">Close</button></div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="research">
+    <div class="dialog wide">
+      <h2>Research</h2>
+      <div id="research-status" class="research-status"></div>
+      <div class="tech-groups" id="tech-groups"></div>
+      <div class="row center"><button id="b-research-close" class="btn primary">Close</button></div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="help">
+    <div class="dialog wide">
+      <h2>How to play</h2>
+      <div class="cols">
+        <div>
+          <h4>Foraging</h4>
+          <p>Searching ants leave a <b class="t-home">blue</b> trail that leads home. Ants carrying food leave a <b class="t-food">green</b> trail that leads to food. Others follow these scents, so busy routes form on their own. Rain washes trails away.</p>
+          <h4>Economy</h4>
+          <p>The resource bar shows food <b class="t-food">brought in</b> and <b class="t-red">spent</b> per minute: every ant, larva and the queen eat all the time, and eggs and new chambers cost food too. The queen turns food into eggs: egg → larva → pupa → ant. Workers kept inside nurse the brood faster and dig.</p>
+          <h4>The nest</h4>
+          <p>Switch to the <b>Nest</b> view to dig: <b>Granaries</b> store food, <b>Nurseries</b> hold more brood, <b>Living Quarters</b> raise the population cap, <b>Fungus Gardens</b> grow food when workers tend them, the <b>Infirmary</b> heals ants at the nest, <b>Guard Posts</b> protect the queen during raids.</p>
+          <h4>Research</h4>
+          <p>Dig a <b>Scent Hall</b>, then open Research (<kbd>R</kbd>): stronger bites and armour, faster legs, keener antennae, longer trails, bigger loads, a more fertile queen, gardens and <b>Deep Tunnels</b>, which widen the area you can dig.</p>
+        </div>
+        <div>
+          <h4>Danger</h4>
+          <p>Spiders hunt your ants — swarm them and they become a feast. The red colony grows too and will raid your nest. If your queen dies, the game is over.</p>
+          <h4>Commands</h4>
+          <p><b>Drop food</b> — a pile of sugar (recharges). <b>Scent trail</b> — paint a food trail; ants follow it in the direction you drag. <b>Rocks / Erase</b> — reshape the terrain. <b>Rally point</b> — send soldiers somewhere; place it on the red nest to raid it.</p>
+          <h4>Controls</h4>
+          <p>Right-drag or WASD to pan, wheel to zoom, <kbd>Tab</kbd> switch view, <kbd>1</kbd>–<kbd>6</kbd> commands, <kbd>Space</kbd> pause, <kbd>F</kbd> cycle speed, <kbd>P</kbd> trails, <kbd>R</kbd> research, <kbd>L</kbd> save / load, <kbd>M</kbd> mute, <kbd>Esc</kbd> back to Inspect. Click the minimap to jump around.</p>
+        </div>
+      </div>
+      <div class="row center"><button id="b-help-close" class="btn primary">Got it</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/util.js"></script>
+<script src="js/config.js"></script>
+<script src="js/world.js"></script>
+<script src="js/ant.js"></script>
+<script src="js/spider.js"></script>
+<script src="js/nest.js"></script>
+<script src="js/colony.js"></script>
+<script src="js/save.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/render-surface.js"></script>
+<script src="js/render-nest.js"></script>
+<script src="js/minimap.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

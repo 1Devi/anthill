@@ -1,0 +1,462 @@
+'use strict';
+// The surface world: terrain, pheromone fields, food, combat and random events.
+
+class PheroMap {
+  constructor(gw, gh) {
+    this.gw = gw;
+    this.gh = gh;
+    this.d = new Float32Array(gw * gh);
+  }
+
+  idx(x, y) {
+    if (x < 0 || y < 0) return -1;
+    const cx = (x / CFG.CELL) | 0, cy = (y / CFG.CELL) | 0;
+    if (cx >= this.gw || cy >= this.gh) return -1;
+    return cy * this.gw + cx;
+  }
+
+  get(x, y) {
+    const i = this.idx(x, y);
+    return i < 0 ? 0 : this.d[i];
+  }
+
+  // Sum over the 3x3 neighbourhood: makes one-cell-wide trails easy to stay on.
+  sample(x, y) {
+    if (x < 0 || y < 0) return 0;
+    const gw = this.gw, cx = (x / CFG.CELL) | 0, cy = (y / CFG.CELL) | 0;
+    if (cx < 1 || cy < 1 || cx >= gw - 1 || cy >= this.gh - 1) return this.get(x, y);
+    const d = this.d, i = cy * gw + cx;
+    return d[i - gw - 1] + d[i - gw] + d[i - gw + 1] + d[i - 1] + d[i] + d[i + 1] + d[i + gw - 1] + d[i + gw] + d[i + gw + 1];
+  }
+
+  // Keep the strongest signal instead of accumulating, so gradients stay clean.
+  mark(x, y, v) {
+    const i = this.idx(x, y);
+    if (i >= 0 && this.d[i] < v) this.d[i] = v;
+  }
+
+  // Radial blob; falloff 1 = linear to zero at the rim, 0 = flat.
+  splat(x, y, r, v, falloff = 1) {
+    const c = CFG.CELL;
+    const x0 = Math.max(0, ((x - r) / c) | 0), x1 = Math.min(this.gw - 1, ((x + r) / c) | 0);
+    const y0 = Math.max(0, ((y - r) / c) | 0), y1 = Math.min(this.gh - 1, ((y + r) / c) | 0);
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        const d = dist((cx + 0.5) * c, (cy + 0.5) * c, x, y);
+        if (d > r) continue;
+        const val = v * (1 - falloff * (d / r));
+        const i = cy * this.gw + cx;
+        if (this.d[i] < val) this.d[i] = val;
+      }
+    }
+  }
+
+  erase(x, y, r) {
+    const c = CFG.CELL;
+    const x0 = Math.max(0, ((x - r) / c) | 0), x1 = Math.min(this.gw - 1, ((x + r) / c) | 0);
+    const y0 = Math.max(0, ((y - r) / c) | 0), y1 = Math.min(this.gh - 1, ((y + r) / c) | 0);
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        if (dist2((cx + 0.5) * c, (cy + 0.5) * c, x, y) <= r * r) this.d[cy * this.gw + cx] = 0;
+      }
+    }
+  }
+
+  decay(f) {
+    const d = this.d;
+    for (let i = 0; i < d.length; i++) {
+      if (d[i] === 0) continue;
+      const v = d[i] * f;
+      d[i] = v < 0.003 ? 0 : v;
+    }
+  }
+}
+
+const FOOD_KINDS = {
+  seeds: 'Seeds',
+  berries: 'Berries',
+  sugar: 'Sugar',
+  corpse: 'Remains',
+  prey: 'Spider carcass',
+};
+
+let FOOD_ID = 1;
+
+class FoodSource {
+  constructor(x, y, amount, kind) {
+    this.id = FOOD_ID++;
+    this.x = x;
+    this.y = y;
+    this.amount = amount;
+    this.max = amount;
+    this.kind = kind;
+    this.layout();
+  }
+
+  layout() {
+    this.r0 = 2 + Math.sqrt(this.max) * 0.6;
+    const n = clamp(Math.round(this.max / 4), 3, 80);
+    this.crumbs = [];
+    for (let i = 0; i < n; i++) {
+      const ang = rand(0, TAU), rr = this.r0 * Math.sqrt(Math.random());
+      this.crumbs.push({ x: Math.cos(ang) * rr, y: Math.sin(ang) * rr, rot: rand(0, TAU), v: Math.random(), d: rr });
+    }
+    this.crumbs.sort((a, b) => a.d - b.d);
+  }
+
+  get pickR() {
+    return 3 + this.r0 * Math.sqrt(Math.max(0, this.amount) / this.max);
+  }
+
+  get visible() {
+    return Math.ceil((this.crumbs.length * Math.max(0, this.amount)) / this.max);
+  }
+
+  get name() {
+    return FOOD_KINDS[this.kind] || 'Food';
+  }
+
+  grow(n) {
+    this.amount += n;
+    if (this.amount > this.max) {
+      this.max = this.amount;
+      this.layout();
+    }
+  }
+}
+
+class World {
+  constructor(opts = {}) {
+    // Saves carry their own size, so older, smaller maps still load.
+    this.W = opts.W || CFG.WORLD_W;
+    this.H = opts.H || CFG.WORLD_H;
+    this.areaK = (this.W * this.H) / (1600 * 1000);
+    this.gw = Math.ceil(this.W / CFG.CELL);
+    this.gh = Math.ceil(this.H / CFG.CELL);
+    this.diffKey = opts.difficulty || 'normal';
+    this.diff = CFG.DIFFICULTY[this.diffKey];
+    this.seed = opts.seed ?? (Math.random() * 1e9) | 0;
+    this.walls = new Uint8Array(this.gw * this.gh);
+    this.wallsVersion = 0;
+    this.wallDirty = []; // world-space rects the renderer must repaint
+    this.foods = [];
+    this.colonies = [];
+    this.spiders = [];
+    this.time = 0;
+    this.tick = 0;
+    this.events = [];
+    this.sounds = []; // drained by the game each frame for audio
+    this.hash = new SpatialHash(this.W, this.H, 24);
+    this.rain = 0;
+    this.nextRain = rand(200, 340);
+    this.spiderT = this.diff.spiders ? this.diff.spiderFirst : Infinity;
+    this.foodSpawnT = rand(20, 35);
+    this.feedCooldown = 0;
+    this.stats = { kills: 0, spiders: 0 };
+    this.result = null;
+    this.victoryShown = false;
+    this.speedMul = 1;
+    this.player = null;
+    this.rival = null;
+    this.generate();
+  }
+
+  log(text, kind = 'info') {
+    this.events.push({ text, kind, time: this.time });
+  }
+
+  // Queue a sound effect; x/y (optional) let the player attenuate it by distance from the camera.
+  sfx(name, x, y) {
+    if (this.sounds.length < 64) this.sounds.push({ name, x, y });
+  }
+
+  // ---------- generation ----------
+
+  generate() {
+    const noise = makeNoise2D(this.seed);
+    const P = { x: this.W * 0.1875, y: this.H * 0.64 }, R = { x: this.W * 0.8125, y: this.H * 0.34 };
+    const C = CFG.CELL;
+    for (let cy = 0; cy < this.gh; cy++) {
+      for (let cx = 0; cx < this.gw; cx++) {
+        const x = (cx + 0.5) * C, y = (cy + 0.5) * C;
+        const near = Math.min(dist(x, y, P.x, P.y), dist(x, y, R.x, R.y));
+        if (near < 110) continue;
+        const v = noise.fbm(x * 0.0042, y * 0.0042, 4) - Math.max(0, (150 - near) / 400);
+        if (v > 0.665) this.walls[cy * this.gw + cx] = 1;
+      }
+    }
+
+    this.player = new Colony(this, { id: 0, name: 'Your colony', isPlayer: true, palette: 'player', x: P.x, y: P.y, ...this.diff.player });
+    this.colonies.push(this.player);
+    if (this.diff.rival) {
+      this.rival = new Colony(this, { id: 1, name: 'Red colony', palette: 'rival', x: R.x, y: R.y, ...this.diff.ai });
+      this.colonies.push(this.rival);
+    }
+
+    for (let i = 0; i < 3; i++) this.placeFoodNear(P.x, P.y, 120, 250, chance(0.7) ? 'seeds' : 'berries');
+    if (this.rival) for (let i = 0; i < 2; i++) this.placeFoodNear(R.x, R.y, 120, 250, 'seeds');
+    for (let i = 0; i < Math.round(5 * this.areaK); i++) this.spawnNaturalFood();
+  }
+
+  spotFree(x, y, r = 10) {
+    if (x < 30 || y < 30 || x > this.W - 30 || y > this.H - 30) return false;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * TAU;
+      if (this.isWall(x + Math.cos(a) * r, y + Math.sin(a) * r)) return false;
+    }
+    return !this.isWall(x, y);
+  }
+
+  placeFoodNear(cx, cy, dmin, dmax, kind) {
+    for (let t = 0; t < 80; t++) {
+      const a = rand(0, TAU), d = rand(dmin, dmax);
+      const x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d;
+      if (this.spotFree(x, y, 14)) return this.addFood(x, y, randInt(180, 300), kind, false);
+    }
+    return null;
+  }
+
+  spawnNaturalFood() {
+    for (let t = 0; t < 80; t++) {
+      const x = rand(40, this.W - 40), y = rand(40, this.H - 40);
+      if (this.colonies.some((c) => dist(x, y, c.x, c.y) < 140)) continue;
+      if (this.spotFree(x, y, 14)) {
+        return this.addFood(x, y, randInt(CFG.FOOD_PILE[0], CFG.FOOD_PILE[1]), chance(0.6) ? 'seeds' : 'berries', false);
+      }
+    }
+    return null;
+  }
+
+  // ---------- queries ----------
+
+  isWall(x, y) {
+    if (x < 0 || y < 0 || x >= this.W || y >= this.H) return true;
+    return this.walls[((y / CFG.CELL) | 0) * this.gw + ((x / CFG.CELL) | 0)] === 1;
+  }
+
+  nearestFood(x, y, r) {
+    let best = null, bd = Infinity;
+    for (const f of this.foods) {
+      if (f.amount <= 0) continue;
+      const lim = r + f.r0;
+      const d = dist2(x, y, f.x, f.y);
+      if (d < lim * lim && d < bd) {
+        bd = d;
+        best = f;
+      }
+    }
+    return best;
+  }
+
+  // Something that can still be fought: alive, on the surface and inside the map.
+  targetable(e) {
+    return !!e && !e.dead && !e.gone && !e.inside && e.x >= 0 && e.y >= 0 && e.x <= this.W && e.y <= this.H;
+  }
+
+  findEnemy(ent, r) {
+    let best = null, bd = r * r;
+    this.hash.query(ent.x, ent.y, r, (e) => {
+      if (e === ent || e.colony === ent.colony || !this.targetable(e)) return;
+      const d = dist2(ent.x, ent.y, e.x, e.y);
+      if (d < bd) {
+        bd = d;
+        best = e;
+      }
+    });
+    return best;
+  }
+
+  pickAt(x, y) {
+    let best = null, bd = 12 * 12;
+    this.hash.query(x, y, 16, (e) => {
+      const d = dist2(x, y, e.x, e.y);
+      const lim = e.isSpider ? (e.r + 6) ** 2 : 12 * 12;
+      if (d < lim && d < bd) {
+        bd = d;
+        best = e;
+      }
+    });
+    if (best) return best.isSpider ? { type: 'spider', obj: best } : { type: 'ant', obj: best };
+    for (const c of this.colonies) if (dist(x, y, c.x, c.y) < 26) return { type: 'colony', obj: c };
+    for (const f of this.foods) if (dist(x, y, f.x, f.y) < f.r0 + 5) return { type: 'food', obj: f };
+    return null;
+  }
+
+  dayInfo() {
+    const t = this.time / CFG.DAY_LENGTH + 0.3;
+    const frac = t % 1;
+    const light = clamp(Math.sin((frac - 0.25) * TAU) * 1.5 + 0.5, 0, 1);
+    const mins = Math.floor(frac * 24 * 60);
+    return { day: Math.floor(t - 0.3) + 1, hour: Math.floor(mins / 60), minute: mins % 60, light, night: 1 - light };
+  }
+
+  // ---------- edits ----------
+
+  paintWalls(x, y, r, val) {
+    const C = CFG.CELL;
+    const x0 = Math.max(0, ((x - r) / C) | 0), x1 = Math.min(this.gw - 1, ((x + r) / C) | 0);
+    const y0 = Math.max(0, ((y - r) / C) | 0), y1 = Math.min(this.gh - 1, ((y + r) / C) | 0);
+    let changed = false;
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        const px = (cx + 0.5) * C, py = (cy + 0.5) * C;
+        if (dist2(px, py, x, y) > r * r) continue;
+        if (val && this.colonies.some((c) => dist(px, py, c.x, c.y) < CFG.NEST_R + 22)) continue;
+        const i = cy * this.gw + cx;
+        if (this.walls[i] !== val) {
+          this.walls[i] = val;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      this.wallsVersion++;
+      this.wallDirty.push([x - r, y - r, x + r, y + r]);
+    }
+  }
+
+  addFood(x, y, amount, kind, merge = true) {
+    if (merge) {
+      for (const f of this.foods) {
+        if (f.kind === kind && f.amount > 0 && dist2(x, y, f.x, f.y) < 100) {
+          f.grow(amount);
+          return f;
+        }
+      }
+    }
+    const f = new FoodSource(x, y, amount, kind);
+    this.foods.push(f);
+    return f;
+  }
+
+  spawnSpider() {
+    const power = 1 + this.time / 900;
+    const side = randInt(0, 3);
+    const x = side === 0 ? -15 : side === 1 ? this.W + 15 : rand(60, this.W - 60);
+    const y = side === 2 ? -15 : side === 3 ? this.H + 15 : rand(60, this.H - 60);
+    const s = new Spider(x, y, power);
+    s.a = Math.atan2(this.H / 2 - y, this.W / 2 - x);
+    this.spiders.push(s);
+    this.stats.spiders++;
+  }
+
+  // ---------- simulation ----------
+
+  update(dt) {
+    this.time += dt;
+    this.tick++;
+
+    if (this.tick % CFG.PHERO_EVAP_EVERY === 0) {
+      const step = dt * CFG.PHERO_EVAP_EVERY * (this.rain > 0 ? 4 : 1);
+
+      const fa = Math.pow(0.5, step / CFG.PHERO.alarm.halfLife);
+      for (const c of this.colonies) {
+        c.home.decay(Math.pow(0.5, step / (CFG.PHERO.home.halfLife * c.mods.trail)));
+        c.foodP.decay(Math.pow(0.5, step / (CFG.PHERO.food.halfLife * c.mods.trail)));
+        c.alarm.decay(fa);
+      }
+    }
+
+    this.hash.clear();
+    for (const c of this.colonies) {
+      for (const a of c.ants) if (!a.dead && !a.inside) this.hash.insert(a);
+    }
+    for (const s of this.spiders) if (!s.dead) this.hash.insert(s);
+
+    for (const c of this.colonies) {
+      const ants = c.ants;
+      for (let i = 0; i < ants.length; i++) if (!ants[i].dead) ants[i].update(dt, this);
+    }
+    for (const s of this.spiders) if (!s.dead) s.update(dt, this);
+
+    this.combat(dt);
+
+    for (const c of this.colonies) c.update(dt);
+    this.spiders = this.spiders.filter((s) => !s.dead && !s.gone);
+    this.foods = this.foods.filter((f) => f.amount > 0.001);
+
+    this.updateEvents(dt);
+    this.checkResult();
+  }
+
+  combat(dt) {
+    const STEP = 3, sdt = dt * STEP, tick = this.tick;
+    for (const col of this.colonies) {
+      for (const ant of col.ants) {
+        if (ant.dead || ant.inside || (tick + ant.id) % STEP) continue;
+        const reach = ant.caste === 'soldier' ? 8 : 6;
+        let foe = null, best = Infinity;
+        this.hash.query(ant.x, ant.y, reach + 12, (e) => {
+          if (e.dead || e.colony === col) return;
+          const rr = e.isSpider ? reach + e.r : reach;
+          const d = dist2(ant.x, ant.y, e.x, e.y);
+          if (d < rr * rr && d < best) {
+            best = d;
+            foe = e;
+          }
+        });
+        if (foe) {
+          foe.damage(ant.dmg * sdt, ant, this);
+          // Against a spider, bite on the move: stopping for long lets it walk away.
+          ant.fightT = foe.isSpider ? 0.1 : 0.3;
+          ant.a = Math.atan2(foe.y - ant.y, foe.x - ant.x);
+        } else if (ant.caste === 'soldier') {
+          for (const other of this.colonies) {
+            if (other === col || !other.alive) continue;
+            if (dist2(ant.x, ant.y, other.x, other.y) < (CFG.NEST_R + 6) ** 2) {
+              other.hurtQueen(ant.dmg * CFG.RAID_DMG * sdt);
+              ant.fightT = 0.3;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  updateEvents(dt) {
+    if (this.diff.spiders) {
+      this.spiderT -= dt;
+      if (this.spiderT <= 0) {
+        const n = 1 + Math.floor(this.time / 600);
+        for (let i = 0; i < n; i++) this.spawnSpider();
+        this.log(n > 1 ? `${n} spiders are on the hunt!` : 'A spider is on the hunt!', 'danger');
+        this.sfx('spider');
+        this.spiderT = rand(this.diff.spiderEvery[0], this.diff.spiderEvery[1]);
+      }
+    }
+
+    this.foodSpawnT -= dt;
+    if (this.foodSpawnT <= 0) {
+      this.foodSpawnT = rand(20, 35);
+      const natural = this.foods.filter((f) => f.kind === 'seeds' || f.kind === 'berries').length;
+      if (natural < CFG.NATURAL_FOOD * this.areaK) this.spawnNaturalFood();
+    }
+
+    if (this.rain > 0) {
+      this.rain -= dt;
+      if (this.rain <= 0) this.log('The rain has stopped.', 'info');
+    } else {
+      this.nextRain -= dt;
+      if (this.nextRain <= 0) {
+        this.rain = rand(18, 30);
+        this.nextRain = rand(220, 380);
+        this.log('Rain! Pheromone trails are washing away.', 'warn');
+      }
+    }
+    this.speedMul = this.rain > 0 ? 0.85 : 1;
+    if (this.feedCooldown > 0) this.feedCooldown -= dt;
+  }
+
+  checkResult() {
+    if (this.result) return;
+    const p = this.player;
+    if (!p.alive) {
+      this.result = { win: false, title: 'The queen has fallen', text: 'Without a queen the colony cannot survive.' };
+    } else if (p.ants.length === 0 && p.brood.length === 0 && p.food < CFG.CASTE.worker.cost) {
+      this.result = { win: false, title: 'The colony has died out', text: 'No workers left and no food to raise new ones.' };
+    } else if (this.rival && !this.rival.alive && !this.victoryShown) {
+      this.victoryShown = true;
+      this.result = { win: true, title: 'Victory!', text: 'The red queen is dead. The meadow belongs to your colony.' };
+    }
+  }
+}

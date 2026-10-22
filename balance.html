@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anthill — Balance sheet</title>
+  <style>
+    :root {
+      --bg: #120d09; --panel: #1c140d; --panel-2: #241a11; --line: rgba(255, 220, 170, 0.12); --line-2: rgba(255, 220, 170, 0.22);
+      --text: #f1e6d4; --muted: #b7a58c; --dim: #8a7a64; --amber: #e8b04a; --green: #7fd36b; --red: #ef8a73; --blue: #5aa0ff;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); }
+    header { padding: 22px 28px 10px; }
+    h1 { margin: 0; font-size: 24px; color: var(--amber); letter-spacing: 0.04em; }
+    header p { margin: 6px 0 0; color: var(--dim); font-size: 13.5px; }
+    nav { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 28px; background: rgba(18, 13, 9, 0.95); border-bottom: 1px solid var(--line); }
+    nav a { color: var(--muted); text-decoration: none; font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); }
+    nav a:hover { color: var(--amber); border-color: var(--amber); }
+    main { padding: 8px 28px 60px; max-width: 1500px; }
+    section { margin-top: 26px; }
+    .sec-head { display: flex; align-items: baseline; gap: 12px; }
+    h2 { margin: 0; font-size: 17px; color: var(--text); }
+    .note { color: var(--dim); font-size: 12.5px; margin: 4px 0 10px; line-height: 1.5; }
+    button { font: inherit; color: inherit; cursor: pointer; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 7px; padding: 5px 10px; font-size: 12px; }
+    button:hover { border-color: var(--amber); }
+    button.primary { background: var(--amber); color: #23170c; border-color: var(--amber); font-weight: 700; padding: 7px 16px; font-size: 13px; }
+    .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+    table { border-collapse: collapse; width: 100%; font-size: 12.8px; }
+    th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    th { position: sticky; top: 0; background: var(--panel-2); color: var(--dim); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; }
+    th:first-child, td:first-child, td.l, th.l { text-align: left; }
+    td.wrap { white-space: normal; min-width: 220px; text-align: left; color: var(--muted); }
+    tr:nth-child(even) td { background: rgba(255, 255, 255, 0.015); }
+    tr:hover td { background: rgba(232, 176, 74, 0.06); }
+    tr.group td { background: rgba(232, 176, 74, 0.08); color: var(--amber); font-weight: 600; text-align: left; }
+    .up { color: var(--green); } .down { color: var(--red); } .muted { color: var(--dim); }
+    .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); margin-bottom: 12px; }
+    .controls label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
+    .controls select, .controls input { background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px; width: 110px; }
+    .controls .check { flex-direction: row; align-items: center; gap: 6px; color: var(--muted); }
+    .controls .check input { width: auto; }
+    #sim-status { color: var(--muted); font-size: 13px; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 1000px) { .two { grid-template-columns: 1fr; } main, header, nav { padding-left: 14px; padding-right: 14px; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Anthill — balance sheet</h1>
+  <p>Every number below is read live from <code>js/config.js</code>, so this page is always in sync with the game. Derived columns are computed here. Use “Copy CSV” to paste a table into a spreadsheet.</p>
+</header>
+<nav id="nav"></nav>
+<main id="main">
+  <section id="sim">
+    <div class="sec-head"><h2>Simulation</h2><button data-csv="sim-summary">Copy CSV (summary)</button><button data-csv="sim-minutes">Copy CSV (per minute)</button></div>
+    <p class="note">Runs the real simulation without graphics. Your colony is played by the scripted AutoPlayer (<code>js/autoplayer.js</code>): it digs what the colony lacks, researches in a fixed order and raises soldiers during raids. Results are averaged over the seeds.</p>
+    <div class="controls">
+      <label>Difficulty <select id="sim-diff"></select></label>
+      <label>Minutes <input id="sim-min" type="number" min="1" max="60" value="15"></label>
+      <label>Seeds <input id="sim-seeds" type="number" min="1" max="20" value="4"></label>
+      <label>First seed <input id="sim-seed0" type="number" value="1"></label>
+      <label class="check"><input id="sim-research" type="checkbox" checked> Bot researches</label>
+      <button id="sim-run" class="primary">Run</button>
+      <span id="sim-status"></span>
+    </div>
+    <div class="scroll"><table id="sim-summary"></table></div>
+    <div class="scroll" style="margin-top:12px"><table id="sim-minutes"></table></div>
+  </section>
+</main>
+
+<script src="js/util.js"></script>
+<script src="js/config.js"></script>
+<script src="js/world.js"></script>
+<script src="js/ant.js"></script>
+<script src="js/spider.js"></script>
+<script src="js/nest.js"></script>
+<script src="js/colony.js"></script>
+<script src="js/autoplayer.js"></script>
+<script src="js/balance.js"></script>
+</body>
+</html>
