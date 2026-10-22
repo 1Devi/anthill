@@ -48,6 +48,18 @@ node tests/save-test.js
 Checks that a save loads back identically, including research, and that old-format saves
 (smaller map, no sizes stored) still load.
 
+## Deploying
+
+The game is published to GitHub Pages by `.github/workflows/pages.yml` on every push to `main`
+(or by hand from the Actions tab). It copies only what the browser needs — `index.html`,
+`balance.html`, `css/` and `js/` — into `_site` and deploys that.
+
+One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**. With the
+old "Deploy from a branch" source, GitHub runs its own `pages-build-deployment` workflow instead,
+which still uses Node 20 actions and prints a deprecation warning.
+
+Live: https://1devi.github.io/anthill/ · balance sheet: https://1devi.github.io/anthill/balance.html
+
 ## Saves
 
 Saves are compact JSON (~40–70 KB): grids are byte-packed with zero-run compression, ants are

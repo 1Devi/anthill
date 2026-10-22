@@ -109,6 +109,9 @@ function serializeWorld(w) {
     feedCooldown: r2(w.feedCooldown),
     stats: w.stats,
     victoryShown: w.victoryShown,
+    history: w.history,
+    marks: w.marks,
+    chronicleEvery: w.chronicleEvery,
     colonies: w.colonies.map(serializeColony),
   };
 }
@@ -182,6 +185,11 @@ function loadWorld(data) {
     rain: data.rain, nextRain: data.nextRain, foodSpawnT: data.foodSpawnT, feedCooldown: data.feedCooldown,
     spiderT: data.spiderT === null ? Infinity : data.spiderT, stats: data.stats, victoryShown: data.victoryShown,
   });
+  if (data.history) {
+    w.history = data.history;
+    w.marks = data.marks || [];
+    w.chronicleEvery = data.chronicleEvery || CFG.CHRONICLE.every;
+  }
   data.colonies.forEach((cd, i) => loadColony(w.colonies[i], cd, w));
   data.colonies.forEach((cd, i) => {
     const r = cd.rally;

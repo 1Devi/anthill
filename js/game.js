@@ -456,8 +456,11 @@ class Game {
       this.ui.toggleHelp(false);
       this.ui.toggleSaves(false);
       this.ui.toggleResearch(false);
+      this.ui.toggleChronicle(false);
     } else if (k === 'r') {
       this.ui.toggleResearch(!this.ui.researchOpen);
+    } else if (k === 'c') {
+      this.ui.toggleChronicle(!this.ui.chronOpen);
     } else if (k === 'l') {
       this.ui.toggleSaves(!this.ui.savesOpen);
     } else if (k === 'm') {
@@ -494,7 +497,7 @@ class Game {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     const w = this.world;
-    const running = this.speed > 0 && !this.ui.helpOpen && !this.ui.savesOpen && !this.ui.researchOpen;
+    const running = this.speed > 0 && !this.ui.helpOpen && !this.ui.savesOpen && !this.ui.researchOpen && !this.ui.chronOpen;
 
     if (!this.demo) {
       const K = this.keys, step = 600 * dt;

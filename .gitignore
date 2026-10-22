@@ -1,0 +1,9 @@
+# Build output of the Pages workflow when run locally
+_site/
+
+# OS and editor clutter
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

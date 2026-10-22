@@ -41,6 +41,7 @@ const CFG = {
   },
   BROOD: { egg: 8, larva: 12, pupa: 9, larvaUpkeep: 0.015 },
   QUEEN: { hp: 400, upkeep: 0.05, layInterval: 2.5, regen: 1.5, starve: 3 },
+  CHRONICLE: { every: 10, cap: 2000 }, // history sample interval (s); past the cap, samples halve and the interval doubles
   RESERVE_SECONDS: 20, // eggs, digging and research leave this many seconds of upkeep untouched
   BUILD_SHARE: 0.4, // share of incoming food set aside for digging and research while any is running
   BUILD_FUND_CAP: 80, // set-aside food stops accumulating beyond this

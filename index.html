@@ -51,6 +51,7 @@
         <button data-speed="2">2×</button>
         <button data-speed="4">4×</button>
       </div>
+      <button id="btn-chronicle" class="round" title="Chronicle (C)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 15l4-5 3 3 5-6"/></svg></button>
       <button id="btn-research" class="round" title="Research (R)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/></svg><i class="rprog"></i></button>
       <button id="btn-saves" class="round" title="Save / load (L)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg></button>
       <button id="btn-settings" class="round" title="Display &amp; sound"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
@@ -63,6 +64,7 @@
 
   <div id="more-pop" class="popover hidden">
     <div class="more-grid">
+      <button class="btn" data-proxy="btn-chronicle">Chronicle</button>
       <button class="btn" data-proxy="btn-saves">Save / load</button>
       <button class="btn" data-proxy="btn-settings">Display</button>
       <button class="btn" data-proxy="btn-sound">Sound</button>
@@ -145,10 +147,11 @@
   </div>
 
   <div class="overlay hidden" id="end">
-    <div class="dialog">
+    <div class="dialog end-dialog">
       <h2 id="end-title"></h2>
       <p id="end-text" class="lead"></p>
       <div class="stats" id="end-stats"></div>
+      <div class="chron" id="end-chron"></div>
       <div class="row center">
         <button id="b-continue" class="btn primary">Keep playing</button>
         <button id="b-restart" class="btn">New game</button>
@@ -167,6 +170,16 @@
         <input type="file" id="f-import" accept=".json,application/json" hidden>
       </div>
       <div class="row center"><button id="b-saves-close" class="btn primary">Close</button></div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="chronicle">
+    <div class="dialog wide">
+      <h2>Chronicle</h2>
+      <p class="hint">Your colony over the whole game. Hover a chart for exact numbers; the marks along the top are events.</p>
+      <div class="chron-stats" id="chron-stats"></div>
+      <div class="chron" id="chron-view"></div>
+      <div class="row center"><button id="b-chron-close" class="btn primary">Close</button></div>
     </div>
   </div>
 
@@ -199,7 +212,7 @@
           <h4>Commands</h4>
           <p><b>Drop food</b> — a pile of sugar (recharges). <b>Scent trail</b> — paint a food trail; ants follow it in the direction you drag. <b>Rocks / Erase</b> — reshape the terrain. <b>Rally point</b> — send soldiers somewhere; place it on the red nest to raid it.</p>
           <h4>Controls</h4>
-          <p>Right-drag or WASD to pan, wheel to zoom, <kbd>Tab</kbd> switch view, <kbd>1</kbd>–<kbd>6</kbd> commands, <kbd>Space</kbd> pause, <kbd>F</kbd> cycle speed, <kbd>P</kbd> trails, <kbd>R</kbd> research, <kbd>L</kbd> save / load, <kbd>M</kbd> mute, <kbd>Esc</kbd> back to Inspect. Click the minimap to jump around.</p>
+          <p>Right-drag or WASD to pan, wheel to zoom, <kbd>Tab</kbd> switch view, <kbd>1</kbd>–<kbd>6</kbd> commands, <kbd>Space</kbd> pause, <kbd>F</kbd> cycle speed, <kbd>P</kbd> trails, <kbd>R</kbd> research, <kbd>C</kbd> chronicle, <kbd>L</kbd> save / load, <kbd>M</kbd> mute, <kbd>Esc</kbd> back to Inspect. Click the minimap to jump around.</p>
         </div>
       </div>
       <div class="row center"><button id="b-help-close" class="btn primary">Got it</button></div>
@@ -220,6 +233,7 @@
 <script src="js/render-surface.js"></script>
 <script src="js/render-nest.js"></script>
 <script src="js/minimap.js"></script>
+<script src="js/chronicle.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/game.js"></script>
 </body>

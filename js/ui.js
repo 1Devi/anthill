@@ -185,6 +185,11 @@ class UI {
     this.bindTip(this.$('r-queen'), () => this.tipQueen());
 
     this.$('btn-research').onclick = () => this.toggleResearch(true);
+    this.$('btn-chronicle').onclick = () => this.toggleChronicle(true);
+    this.$('b-chron-close').onclick = () => this.toggleChronicle(false);
+    window.addEventListener('resize', () => {
+      if (this.chronOpen) this.chronView.render(this.g.world);
+    });
     this.$('b-research-close').onclick = () => this.toggleResearch(false);
     // Delegated: the cards are rebuilt while the dialog is open.
     this.$('research').addEventListener('click', (e) => {
@@ -389,6 +394,28 @@ class UI {
 
   toggleHelp(on) {
     this.$('help').classList.toggle('hidden', !on);
+  }
+
+  // ---------- chronicle ----------
+
+  get chronOpen() {
+    return !this.$('chronicle').classList.contains('hidden');
+  }
+
+  toggleChronicle(on) {
+    this.$('chronicle').classList.toggle('hidden', !on);
+    if (!on) return;
+    this.$('chron-stats').innerHTML = this.statTiles();
+    this.chronView = this.chronView || new ChronicleView(this.$('chron-view'));
+    this.chronView.render(this.g.world);
+  }
+
+  statTiles() {
+    const w = this.g.world, p = w.player;
+    const tile = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
+    return tile(w.dayInfo().day, 'day') + tile(p.ants.length, 'ants now') + tile(p.stats.peak, 'peak population') +
+      tile(Math.floor(p.stats.collected).toLocaleString('en'), 'food gathered') + tile(p.stats.born, 'ants raised') +
+      tile(p.stats.died, 'ants lost') + tile(w.stats.kills, 'enemies killed');
   }
 
   // ---------- research ----------
@@ -694,7 +721,7 @@ class UI {
   }
 
   closeOverlays() {
-    for (const id of ['saves', 'start', 'end', 'help', 'research']) this.$(id).classList.add('hidden');
+    for (const id of ['saves', 'start', 'end', 'help', 'research', 'chronicle']) this.$(id).classList.add('hidden');
   }
 
   refreshContinue() {
@@ -778,10 +805,12 @@ class UI {
     const stat = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
     this.$('end-stats').innerHTML =
       stat(w.dayInfo().day, 'days survived') + stat(p.stats.peak, 'peak population') +
-      stat(Math.floor(p.stats.collected), 'food gathered') + stat(p.stats.born, 'ants raised') +
+      stat(Math.floor(p.stats.collected).toLocaleString('en'), 'food gathered') + stat(p.stats.born, 'ants raised') +
       stat(w.stats.kills, 'enemies killed') + stat(w.stats.spiders, 'spiders seen');
     this.$('b-continue').classList.toggle('hidden', !r.win);
     this.$('b-restart').classList.toggle('primary', !r.win);
     this.$('end').classList.remove('hidden');
+    // Population and food over the game, right on the end screen.
+    new ChronicleView(this.$('end-chron'), { compact: true }).render(w);
   }
 }

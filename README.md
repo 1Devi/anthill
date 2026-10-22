@@ -9,8 +9,10 @@ colony next door.
 
 ## How to play
 
-Open **`index.html`** in Chrome, Edge or Firefox — just double-click it. Nothing to install, no
-internet needed. Pick a difficulty and press **Start colony**.
+**Play online:** https://1devi.github.io/anthill/ — works on computers, phones and tablets.
+
+Or download the project and open **`index.html`** in Chrome, Edge or Firefox — just double-click
+it. Nothing to install, no internet needed. Pick a difficulty and press **Start colony**.
 
 | Difficulty | What to expect |
 | --- | --- |
@@ -115,6 +117,7 @@ The **Colony orders** panel at the bottom sets how the colony behaves:
 | Commands | 1 – 6 on the surface, 1 – 7 to pick a chamber in the nest |
 | Brush size | [ and ] |
 | Research | R |
+| Chronicle | C |
 | Save / load | L |
 | Pheromone trails on/off | P |
 | Mute | M |
@@ -127,7 +130,14 @@ Click or drag on the **minimap** to jump around the meadow.
 and press and hold instead of right-clicking (cancel, recall soldiers, deselect). In the nest, the
 first tap shows where a chamber would go and a second tap places it. The bottom panel has four
 pages — minimap, selection, orders, commands — swipe sideways or tap the dots. Saving, display,
-sound and help are under the **⋯** button.
+sound, help and the chronicle are under the **⋯** button (also on smaller laptop screens).
+
+## Chronicle
+
+Press **C** (or the chart button at the top) to see your colony's story so far: how many ants you
+had and how many the rivals had, how much food came in and went out each minute, and how full
+your stores were. Marks along the top show events — red for danger, green for good news; hover
+them or any point on a chart for details. The same graphs appear on the end screen.
 
 ## Saving
 
@@ -160,7 +170,7 @@ What's coming next, roughly in this order:
 
 - [x] **Touch controls** — play on a phone or tablet: drag to move, pinch to zoom, a layout that fits
   small screens.
-- [ ] **Chronicle** — graphs of your population and food over the whole game, on the end screen and
+- [x] **Chronicle** — graphs of your population and food over the whole game, on the end screen and
   any time from the top bar.
 - [ ] **Map settings** — choose the map size, how much food and how many rocks there are, and fight
   up to three rival colonies.

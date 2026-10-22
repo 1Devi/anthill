@@ -158,11 +158,29 @@ class World {
     this.speedMul = 1;
     this.player = null;
     this.rival = null;
+    // Chronicle: [t, ants, workers, soldiers, brood, food, foodCap, income/min, spent/min, rival ants]
+    this.history = [];
+    this.marks = []; // notable events for the chronicle: { t, kind, text }
+    this.chronicleEvery = CFG.CHRONICLE.every;
+    this.chronicleT = 0;
     this.generate();
   }
 
   log(text, kind = 'info') {
     this.events.push({ text, kind, time: this.time });
+    if ((kind === 'danger' || kind === 'good') && this.marks.length < 400) this.marks.push({ t: this.time, kind, text });
+  }
+
+  // One chronicle sample; when the record gets long, keep every other sample and sample half as often.
+  recordHistory() {
+    const p = this.player, f = p.flows(), n = p.counts;
+    const rivals = this.colonies.reduce((s, c) => s + (c.isPlayer ? 0 : c.ants.length), 0);
+    this.history.push([Math.round(this.time), p.ants.length, n.workers, n.soldiers, p.brood.length, Math.round(p.food),
+      p.caps.food, Math.round(f.income), Math.round(f.spent), rivals]);
+    if (this.history.length > CFG.CHRONICLE.cap) {
+      this.history = this.history.filter((_, i) => i % 2 === 0);
+      this.chronicleEvery *= 2;
+    }
   }
 
   // Queue a sound effect; x/y (optional) let the player attenuate it by distance from the camera.
@@ -376,6 +394,11 @@ class World {
     this.foods = this.foods.filter((f) => f.amount > 0.001);
 
     this.updateEvents(dt);
+    this.chronicleT -= dt;
+    if (this.chronicleT <= 0) {
+      this.chronicleT += this.chronicleEvery;
+      this.recordHistory();
+    }
     this.checkResult();
   }
 
