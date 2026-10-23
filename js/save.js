@@ -93,6 +93,7 @@ function serializeWorld(w) {
     v: SAVE_VERSION,
     seed: w.seed,
     diff: w.diffKey,
+    settings: w.settings,
     W: w.W,
     H: w.H,
     time: r2(w.time),
@@ -165,8 +166,10 @@ function loadColony(c, d, w) {
 
 function loadWorld(data) {
   if (!data || data.v !== SAVE_VERSION) throw new Error('This save is from an incompatible version.');
-  // Saves without a size come from the original 1600x1000 meadow.
-  const w = new World({ difficulty: data.diff, seed: data.seed, W: data.W || 1600, H: data.H || 1000 });
+  // Saves without a size come from the original 1600x1000 meadow; saves without map settings
+  // had one rival on Normal and Hard (the defaults).
+  const w = new World({ difficulty: data.diff, seed: data.seed, settings: data.settings, W: data.W || 1600, H: data.H || 1000 });
+  if (w.colonies.length !== data.colonies.length) throw new Error('This save does not match its map settings.');
   w.time = data.time;
   w.tick = data.tick;
   w.walls = unpackBytes(data.walls, w.walls.length);
@@ -214,7 +217,7 @@ const SaveStore = {
 
   pack(w) {
     const d = w.dayInfo();
-    const meta = { day: d.day, ants: w.player.ants.length, diff: w.diffKey, savedAt: Date.now() };
+    const meta = { day: d.day, ants: w.player.ants.length, diff: w.diffKey, size: w.settings.size, rivals: w.rivals.length, savedAt: Date.now() };
     return { meta, data: serializeWorld(w) };
   },
 

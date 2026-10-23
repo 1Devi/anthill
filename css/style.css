@@ -347,6 +347,11 @@ input[type="range"] { width: 100%; accent-color: var(--amber); margin: 4px 0 0; 
 .diff.active { border-color: var(--amber); background: rgba(232, 176, 74, 0.12); }
 .diff.active b { color: var(--amber); }
 .keys { margin-top: 18px !important; font-size: 12px !important; color: var(--dim) !important; }
+.map-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: -6px 0 20px; }
+.map-opt > span { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-bottom: 5px; }
+.map-opt .seg button { flex: 1; padding: 7px 4px; }
+.map-opt .seg button:disabled { cursor: default; background: transparent; }
+.map-opt.off { opacity: 0.45; }
 #b-start { width: 100%; }
 #start-saves { margin-top: 8px; }
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 18px; }
@@ -458,5 +463,6 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 @media (max-width: 480px) {
   .tech-groups { grid-template-columns: 1fr; }
+  .map-opts { grid-template-columns: 1fr; }
   .dialog h1 { font-size: 28px; }
 }

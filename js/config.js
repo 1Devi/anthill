@@ -2,8 +2,35 @@
 // All tunable game constants live here.
 
 const CFG = {
-  WORLD_W: 2400,
-  WORLD_H: 1500,
+  // Map options on the start screen. Saves keep the option keys, so these numbers can change freely.
+  MAP: {
+    size: {
+      small: { name: 'Small', W: 1600, H: 1000 },
+      medium: { name: 'Medium', W: 2400, H: 1500 },
+      large: { name: 'Large', W: 3200, H: 2000 },
+    },
+    food: { // scales how many natural piles the meadow holds and how big they are
+      scarce: { name: 'Scarce', mul: 0.5 },
+      normal: { name: 'Normal', mul: 1 },
+      rich: { name: 'Rich', mul: 1.6 },
+    },
+    rocks: { // terrain noise above this becomes rock: ~5%, ~11% and ~18% of the meadow
+      few: { name: 'Few', threshold: 0.715 },
+      normal: { name: 'Normal', threshold: 0.665 },
+      many: { name: 'Many', threshold: 0.625 },
+    },
+    maxRivals: 3,
+    defaults: { size: 'medium', food: 'normal', rocks: 'normal', rivals: 1 },
+  },
+  PLAYER_AT: [0.1875, 0.64], // nest position as a share of the map width and height
+  // Rival colonies, in the order they join the map.
+  RIVALS: [
+    { name: 'Red colony', adj: 'red', palette: 'rival', at: [0.8125, 0.34] },
+    { name: 'Amber colony', adj: 'amber', palette: 'rival2', at: [0.72, 0.86] },
+    { name: 'Violet colony', adj: 'violet', palette: 'rival3', at: [0.5, 0.14] },
+  ],
+  RIVAL_STAGGER: 120, // each further rival waits this many seconds longer before its first raid
+  RAID_PLAYER_WEIGHT: 2, // with several rivals, each raid picks the player this many times as often as another rival
   NEST: {
     W: 2000, H: 1200, surfaceY: 120, // underground cross-section, in nest units
     // Diggable zone per Deep Tunnels level: half-width around the entrance and depth below the surface.
@@ -11,6 +38,7 @@ const CFG = {
   },
   NATURAL_FOOD: 14, // max natural food piles per 1600x1000 of meadow
   FOOD_PILE: [220, 420], // size range of natural food piles
+  FOOD_REGROW: [45, 79], // seconds between new natural piles per 1600x1000 of meadow
   CELL: 5, // pheromone / wall grid cell size in world units
   TICK: 1 / 60,
   DAY_LENGTH: 150, // seconds per in-game day
@@ -96,14 +124,14 @@ const CFG = {
       player: { workers: 22, soldiers: 2, food: 80 },
     },
     normal: {
-      name: 'Normal', desc: 'A rival colony and the occasional hungry spider.',
+      name: 'Normal', desc: 'Rival colonies next door and the occasional hungry spider.',
       rival: true, spiders: true, feedCooldown: 30,
       spiderFirst: 180, spiderEvery: [150, 220],
       player: { workers: 20, soldiers: 3, food: 60 },
       ai: { workers: 14, soldiers: 2, food: 40, forageMul: 1.1, researchEvery: 210, soldierRatio: 0.2, raidGrace: 600, raidSize: 6, raidGrowth: 3, raidMax: 24 },
     },
     hard: {
-      name: 'Hard', desc: 'An aggressive rival and frequent spider attacks.',
+      name: 'Hard', desc: 'Aggressive rivals that raid sooner, and frequent spider attacks.',
       rival: true, spiders: true, feedCooldown: 45,
       spiderFirst: 110, spiderEvery: [90, 150],
       player: { workers: 16, soldiers: 2, food: 45 },

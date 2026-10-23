@@ -52,8 +52,8 @@ class Game {
     requestAnimationFrame(this.loop);
   }
 
-  start(diff, demo = false) {
-    this.setupWorld(new World({ difficulty: diff }), demo);
+  start(diff, demo = false, settings) {
+    this.setupWorld(new World({ difficulty: diff, settings }), demo);
     if (!demo) {
       this.world.log('Your colony is awake. Workers are heading out to find food.', 'info');
       this.world.log('Tip: switch to the Nest view (Tab) to dig more chambers.', 'info');
@@ -406,7 +406,7 @@ class Game {
         if (!first) return;
         p.setRally(m.x, m.y);
         this.sound.play('march');
-        w.log(p.rally.raid ? 'Soldiers march on the red nest!' : 'Soldiers are heading to the rally point.', p.rally.raid ? 'danger' : 'info');
+        w.log(p.rally.raid ? `Soldiers march on the ${p.rally.target.adj} nest!` : 'Soldiers are heading to the rally point.', p.rally.raid ? 'danger' : 'info');
         break;
     }
   }

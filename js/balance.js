@@ -240,18 +240,58 @@ function difficultySection() {
     ['Spiders', ...v((d) => yes(d.spiders))],
     ['First spider', ...v((d) => (d.spiders ? secs(d.spiderFirst) : '—'))],
     ['Interval', ...v((d) => (d.spiders ? `${d.spiderEvery[0]}–${d.spiderEvery[1]} s` : '—'))],
-    { group: 'Red colony' },
-    ['Rival', ...v((d) => yes(d.rival))],
+    { group: 'Rival colonies (each)' },
+    ['Rivals', ...v((d) => (d.rival ? `0–${CFG.MAP.maxRivals}, ${CFG.MAP.defaults.rivals} by default` : 'none'))],
     ['Start workers / soldiers', ...v((d) => (d.ai ? `${d.ai.workers} / ${d.ai.soldiers}` : '—'))],
     ['Start food', ...v((d) => (d.ai ? d.ai.food : '—'))],
     ['Foraging bonus', ...v((d) => (d.ai ? `×${d.ai.forageMul}` : '—'))],
     ['Soldier share', ...v((d) => (d.ai ? pct(d.ai.soldierRatio) : '—'))],
     ['Free research every', ...v((d) => (d.ai ? secs(d.ai.researchEvery) : '—'))],
-    ['First raid not before', ...v((d) => (d.ai ? secs(d.ai.raidGrace) : '—'))],
+    ['First raid not before', ...v((d) => (d.ai ? `${secs(d.ai.raidGrace)} (+${secs(CFG.RIVAL_STAGGER)} per further rival)` : '—'))],
     ['Raid party', ...v((d) => (d.ai ? `${d.ai.raidSize} +${d.ai.raidGrowth}/raid, max ${d.ai.raidMax}` : '—'))],
   ];
   addSection('difficulty', 'Difficulty', 'Side-by-side settings for each difficulty.',
     [{ cols: [{ h: 'Setting', l: true }, ...keys.map((k) => ({ h: D[k].name }))], rows }]);
+}
+
+// ---------- map options ----------
+
+// Share of the meadow that becomes rock for a noise threshold, sampled over a few seeds.
+function rockCover(threshold) {
+  const W = 2400, H = 1500, step = 10;
+  let rock = 0, n = 0;
+  for (let seed = 1; seed <= 4; seed++) {
+    const noise = makeNoise2D(seed);
+    for (let y = step / 2; y < H; y += step) {
+      for (let x = step / 2; x < W; x += step, n++) if (noise.fbm(x * 0.0042, y * 0.0042, 4) > threshold) rock++;
+    }
+  }
+  return rock / n;
+}
+
+function mapSection() {
+  const M = CFG.MAP, d = M.defaults, area = (s) => (s.W * s.H) / (1600 * 1000);
+  const tag = (key, k) => (k === d[key] ? ' (default)' : '');
+  const at = (s, [fx0, fy0]) => [s.W * fx0, s.H * fy0];
+  const sizes = Object.entries(M.size).map(([k, s]) => {
+    const a = area(s), [px, py] = at(s, CFG.PLAYER_AT);
+    return [s.name + tag('size', k), `${s.W} × ${s.H}`, fx(a, 2), fx(CFG.NATURAL_FOOD * a, 0),
+      `${fx(CFG.FOOD_REGROW[0] / a, 0)}–${fx(CFG.FOOD_REGROW[1] / a, 0)} s`,
+      CFG.RIVALS.map((r) => fx(dist(px, py, ...at(s, r.at)), 0)).join(' / ')];
+  });
+  const pile = mid(CFG.FOOD_PILE);
+  const food = Object.entries(M.food).map(([k, f]) => [f.name + tag('food', k), `×${f.mul}`, fx(CFG.NATURAL_FOOD * f.mul, 1),
+    `${fx(CFG.FOOD_PILE[0] * f.mul, 0)}–${fx(CFG.FOOD_PILE[1] * f.mul, 0)}`, fx(CFG.NATURAL_FOOD * f.mul * pile * f.mul, 0)]);
+  const rocks = Object.entries(M.rocks).map(([k, r]) => [r.name + tag('rocks', k), String(r.threshold), pct(rockCover(r.threshold))]);
+  const rivals = CFG.RIVALS.map((r, i) => [r.name, `${r.at[0]} W, ${r.at[1]} H`,
+    ...['normal', 'hard'].map((k) => secs(CFG.DIFFICULTY[k].ai.raidGrace + i * CFG.RIVAL_STAGGER))]);
+  addSection('map', 'Map options', `Choices on the start screen. Your nest sits at ${CFG.PLAYER_AT[0]} W, ${CFG.PLAYER_AT[1]} H; ` +
+    `rivals join in the order listed. Natural food regrows at the same rate per area on every map size.`, [
+    { name: 'Size', cols: [{ h: 'Size', l: true }, { h: 'World units' }, { h: 'Area ×1.6 M' }, { h: 'Max natural piles' }, { h: 'New pile every' }, { h: 'To red / amber / violet nest' }], rows: sizes },
+    { name: 'Food', cols: [{ h: 'Food', l: true }, { h: 'Multiplier' }, { h: 'Piles per 1.6 M' }, { h: 'Pile size' }, { h: 'Standing food per 1.6 M' }], rows: food },
+    { name: 'Rocks', cols: [{ h: 'Rocks', l: true }, { h: 'Noise threshold' }, { h: 'Meadow covered' }], rows: rocks },
+    { name: 'Rivals', cols: [{ h: 'Colony', l: true }, { h: 'Nest at' }, { h: 'First raid (Normal)' }, { h: 'First raid (Hard)' }], rows: rivals },
+  ]);
 }
 
 // ---------- constants ----------
@@ -260,11 +300,11 @@ function constantsSection() {
   const P = CFG.PHERO;
   const rows = [
     { group: 'World' },
-    ['Meadow size', `${CFG.WORLD_W} × ${CFG.WORLD_H}`, 'World units'],
+    ['Meadow size', Object.values(CFG.MAP.size).map((s) => `${s.W} × ${s.H}`).join(', '), 'World units; see Map options'],
     ['Nest size', `${CFG.NEST.W} × ${CFG.NEST.H}`, 'Cross-section units'],
     ['Grid cell', CFG.CELL, 'Pheromone / rock grid resolution'],
     ['Day length', secs(CFG.DAY_LENGTH), 'Real seconds at 1× speed'],
-    ['Natural food', `${CFG.NATURAL_FOOD} piles per 1.6 M units²`, 'Regrows every 20–35 s up to this density'],
+    ['Natural food', `${CFG.NATURAL_FOOD} piles per 1.6 M units²`, `A new pile every ${CFG.FOOD_REGROW[0]}–${CFG.FOOD_REGROW[1]} s per 1.6 M units² up to this density; scaled by the Food option`],
     ['Pile size', `${CFG.FOOD_PILE[0]}–${CFG.FOOD_PILE[1]}`, 'Food per natural pile'],
     ['Drop food', CFG.FEED.amount, 'Sugar per use of the tool'],
     { group: 'Foraging' },
@@ -289,6 +329,7 @@ function constantsSection() {
     ['Soldier patrol radius', CFG.PATROL_R, ''],
     ['Soldier sight', CFG.SOLDIER_SENSE, 'Raiders only react within 35'],
     ['Raid damage to queen', pct(CFG.RAID_DMG), 'Of a raider’s bite, reduced by Guard Posts'],
+    ['Raid targets', `you ×${CFG.RAID_PLAYER_WEIGHT}, each other rival ×1`, 'With several rivals; a lone rival always raids you'],
     ['Nest radius', CFG.NEST_R, ''],
   ];
   addSection('constants', 'Constants', 'Everything else that shapes the simulation.',
@@ -298,12 +339,12 @@ function constantsSection() {
 // ---------- simulation ----------
 
 function snapshot(w) {
-  const p = w.player, f = p.flows(), n = p.counts, r = w.rival;
+  const p = w.player, f = p.flows(), n = p.counts, sum = (fn) => w.rivals.reduce((s, r) => s + fn(r), 0);
   return {
     alive: p.alive, ants: p.ants.length, workers: n.workers, soldiers: n.soldiers, brood: p.brood.length, food: p.food,
     income: f.income, spent: f.spent, net: f.net, tech: Object.values(p.tech).reduce((a, b) => a + b, 0),
     chambers: p.nest.chambers.filter((c) => c.built && c.type !== 'entrance').length, queen: p.queen.hp,
-    rivalAnts: r ? r.ants.length : 0, rivalSoldiers: r ? r.counts.soldiers : 0,
+    rivalAnts: sum((r) => r.ants.length), rivalSoldiers: sum((r) => r.counts.soldiers),
   };
 }
 
@@ -322,10 +363,12 @@ async function runSim() {
   const seeds = Number(document.getElementById('sim-seeds').value);
   const seed0 = Number(document.getElementById('sim-seed0').value);
   const research = document.getElementById('sim-research').checked;
+  const settings = Object.fromEntries(['size', 'food', 'rocks', 'rivals'].map((k) => [k, document.getElementById('sim-' + k).value]));
+  settings.rivals = Number(settings.rivals);
   const runs = [];
   const t0 = performance.now();
   for (let s = 0; s < seeds && simRunning; s++) {
-    const seed = seed0 + s, w = new World({ difficulty: diff, seed }), bot = new AutoPlayer(w, { research });
+    const seed = seed0 + s, w = new World({ difficulty: diff, seed, settings }), bot = new AutoPlayer(w, { research });
     const rec = { seed, mins: [], outcome: 'survived', lostAt: null };
     for (let m = 1; m <= minutes && simRunning; m++) {
       for (let i = 0; i < 60 / CFG.TICK; i++) {
@@ -347,7 +390,7 @@ async function runSim() {
       if (rec.lostAt) break;
     }
     const p = w.player;
-    rec.end = { peak: p.stats.peak, gathered: p.stats.collected, born: p.stats.born, died: p.stats.died, raids: w.rival ? w.rival.raids : 0, kills: w.stats.kills };
+    rec.end = { peak: p.stats.peak, gathered: p.stats.collected, born: p.stats.born, died: p.stats.died, raids: w.rivals.reduce((n, r) => n + r.raids, 0), kills: w.stats.kills };
     runs.push(rec);
     renderSim(runs, minutes);
   }
@@ -364,7 +407,7 @@ function renderSim(runs, minutes) {
   });
   document.getElementById('sim-summary').innerHTML = tableHtml([
     { h: 'Seed', l: true }, { h: 'Outcome', l: true }, { h: 'Minutes' }, { h: 'Ants' }, { h: 'Peak' }, { h: 'Gathered' }, { h: 'Born' },
-    { h: 'Died' }, { h: 'Research lvls' }, { h: 'Chambers' }, { h: 'Raids on you' }, { h: 'Kills' }, { h: 'Red ants' },
+    { h: 'Died' }, { h: 'Research lvls' }, { h: 'Chambers' }, { h: 'Rival raids' }, { h: 'Kills' }, { h: 'Rival ants' },
   ], summary);
 
   const rows = [];
@@ -380,7 +423,7 @@ function renderSim(runs, minutes) {
   }
   document.getElementById('sim-minutes').innerHTML = tableHtml([
     { h: 'Min', l: true }, { h: 'Alive' }, { h: 'Ants' }, { h: 'Workers' }, { h: 'Soldiers' }, { h: 'Brood' }, { h: 'Food' },
-    { h: 'Income/min' }, { h: 'Spent/min' }, { h: 'Net/min' }, { h: 'Research' }, { h: 'Chambers' }, { h: 'Queen HP' }, { h: 'Red ants' }, { h: 'Red soldiers' },
+    { h: 'Income/min' }, { h: 'Spent/min' }, { h: 'Net/min' }, { h: 'Research' }, { h: 'Chambers' }, { h: 'Queen HP' }, { h: 'Rival ants' }, { h: 'Rival soldiers' },
   ], rows);
 }
 
@@ -393,10 +436,17 @@ chamberSection();
 researchSection();
 threatSection();
 difficultySection();
+mapSection();
 constantsSection();
 sections.push({ id: 'sim', title: 'Simulation' });
 document.getElementById('nav').innerHTML = sections.map((s) => `<a href="#${s.id}">${s.title}</a>`).join('');
 const diffSel = document.getElementById('sim-diff');
 diffSel.innerHTML = Object.entries(CFG.DIFFICULTY).map(([k, d]) => `<option value="${k}" ${k === 'normal' ? 'selected' : ''}>${d.name}</option>`).join('');
+for (const k of ['size', 'food', 'rocks']) {
+  document.getElementById('sim-' + k).innerHTML = Object.entries(CFG.MAP[k])
+    .map(([key, o]) => `<option value="${key}" ${key === CFG.MAP.defaults[k] ? 'selected' : ''}>${o.name}</option>`).join('');
+}
+document.getElementById('sim-rivals').innerHTML = Array.from({ length: CFG.MAP.maxRivals + 1 },
+  (_, n) => `<option value="${n}" ${n === CFG.MAP.defaults.rivals ? 'selected' : ''}>${n}</option>`).join('');
 document.getElementById('sim-run').onclick = runSim;
 renderSim([], 0);

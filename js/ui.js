@@ -25,7 +25,7 @@ const COMMANDS = {
     { tool: 'lure', name: 'Scent trail', desc: 'Drag from the nest towards a spot: ants follow the scent in the direction you paint.' },
     { tool: 'wall', name: 'Rocks', desc: 'Drag to place rocks. Ants walk around them; spiders climb over. [ and ] change brush size.' },
     { tool: 'erase', name: 'Erase', desc: 'Drag to remove rocks and your scent marks.' },
-    { tool: 'rally', name: 'Rally point', desc: 'Click to send soldiers there. Click the red nest to raid it. Right-click to recall.' },
+    { tool: 'rally', name: 'Rally point', desc: 'Click to send soldiers there. Click a rival nest to raid it. Right-click to recall.' },
   ],
   nest: [
     { build: 'storage' },
@@ -41,6 +41,9 @@ const COMMANDS = {
 
 const SHORT_NAMES = { barracks: 'Quarters', guard: 'Guard Post', garden: 'Garden' };
 const TECH_GROUPS = ['Combat', 'Foraging', 'Colony', 'Nest'];
+
+const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const NEW_GAME_KEY = 'anthill.newGame';
 
 const fmtTime = (s) => (s < 60 ? `${Math.round(s)} s` : `${(s / 60).toFixed(1)} min`);
 const fmtRate = (v) => (Math.abs(v) < 0.05 ? '0' : Math.abs(v) < 10 ? v.toFixed(1) : Math.round(v).toString());
@@ -61,6 +64,8 @@ class UI {
   constructor(game) {
     this.g = game;
     this.diff = 'normal';
+    this.newGame = mapSettings({ rival: true }); // map options picked on the start screen
+    this.loadNewGamePrefs();
     this.statT = 0;
     this.logCursor = 0;
     this.tip = null; // { el, fn } of the HUD element whose tooltip is showing
@@ -84,12 +89,15 @@ class UI {
       b.onclick = () => {
         this.diff = key;
         diffs.querySelectorAll('.diff').forEach((x) => x.classList.toggle('active', x === b));
+        this.refreshMapOptions();
       };
       diffs.appendChild(b);
     }
+    this.buildMapOptions();
     this.$('b-start').onclick = () => {
       this.$('start').classList.add('hidden');
-      this.g.start(this.diff);
+      this.saveNewGamePrefs();
+      this.g.start(this.diff, false, this.newGame);
     };
 
     document.querySelectorAll('#views button').forEach((b) => (b.onclick = () => this.g.setView(b.dataset.view)));
@@ -205,6 +213,62 @@ class UI {
     });
   }
 
+  // ---------- start screen ----------
+
+  // One row of choices per map option. Peaceful games have no rivals, so that row switches off.
+  buildMapOptions() {
+    const box = this.$('map-opts'), M = CFG.MAP;
+    const groups = [
+      ['size', 'Map size', Object.entries(M.size).map(([k, v]) => [k, v.name, `${v.W} × ${v.H}`])],
+      ['food', 'Food', Object.entries(M.food).map(([k, v]) => [k, v.name])],
+      ['rocks', 'Rocks', Object.entries(M.rocks).map(([k, v]) => [k, v.name])],
+      ['rivals', 'Rival colonies', Array.from({ length: M.maxRivals + 1 }, (_, n) => [n, String(n)])],
+    ];
+    box.innerHTML = groups.map(([key, label, opts]) => `<div class="map-opt" data-key="${key}"><span>${label}</span><div class="seg">` +
+      opts.map(([v, name, tip]) => `<button data-v="${v}"${tip ? ` title="${tip}"` : ''}>${name}</button>`).join('') + '</div></div>').join('');
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-v]');
+      if (!b || b.disabled) return;
+      const key = b.closest('[data-key]').dataset.key;
+      this.newGame[key] = key === 'rivals' ? Number(b.dataset.v) : b.dataset.v;
+      this.refreshMapOptions();
+    });
+    this.refreshMapOptions();
+  }
+
+  refreshMapOptions() {
+    const peaceful = !CFG.DIFFICULTY[this.diff].rival;
+    this.$('map-opts').querySelectorAll('[data-key]').forEach((row) => {
+      const key = row.dataset.key, off = key === 'rivals' && peaceful;
+      const v = off ? 0 : this.newGame[key];
+      row.classList.toggle('off', off);
+      row.title = off ? 'Peaceful games have no rivals' : '';
+      row.querySelectorAll('button').forEach((b) => {
+        b.classList.toggle('active', b.dataset.v === String(v));
+        b.disabled = off;
+      });
+    });
+  }
+
+  // The start screen remembers the last difficulty and map options in this browser.
+  loadNewGamePrefs() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(NEW_GAME_KEY)) || {};
+      if (CFG.DIFFICULTY[saved.diff]) this.diff = saved.diff;
+      this.newGame = mapSettings({ rival: true }, saved.map);
+    } catch {
+      /* storage blocked or garbled: keep the defaults */
+    }
+  }
+
+  saveNewGamePrefs() {
+    try {
+      localStorage.setItem(NEW_GAME_KEY, JSON.stringify({ diff: this.diff, map: this.newGame }));
+    } catch {
+      /* storage blocked: nothing to remember */
+    }
+  }
+
   // ---------- tooltips ----------
 
   bindTip(el, fn) {
@@ -281,7 +345,7 @@ class UI {
 
   tipSoldiers() {
     const p = this.g.world.player, n = p.counts;
-    const order = p.rally ? (p.rally.raid ? 'Raiding the red nest' : 'Holding the rally point') : 'Guarding the nest';
+    const order = p.rally ? (p.rally.raid ? `Raiding the ${p.rally.target ? p.rally.target.adj : 'enemy'} nest` : 'Holding the rally point') : 'Guarding the nest';
     return this.tipRows('Soldiers', [
       ['On duty', n.soldiers],
       ['In the brood', n.broodSoldiers],
@@ -618,7 +682,7 @@ class UI {
         return;
       }
       const low = o.hp < o.maxHp * 0.35;
-      el.innerHTML = `<div class="name">${o.colony.isPlayer ? 'Your' : 'Red'} ${CFG.CASTE[o.caste].name.toLowerCase()}</div>` +
+      el.innerHTML = `<div class="name">${capital(o.colony.adj)} ${CFG.CASTE[o.caste].name.toLowerCase()}</div>` +
         `<div class="role">${o.task}</div>${this.bar(o.hp / o.maxHp, low ? 'red' : '')}` +
         this.kv([
           ['Health', `${Math.ceil(o.hp)} / ${o.maxHp}`],
@@ -652,7 +716,10 @@ class UI {
 
   colonySummary() {
     const w = this.g.world, p = w.player, n = p.counts;
-    return `<div class="name">Your colony</div><div class="role">Day ${w.dayInfo().day} · ${w.diff.name} · click something to inspect it</div>` +
+    // The panel has room for five rows, so the rivals go in the subtitle.
+    const left = w.rivals.filter((r) => r.alive).length;
+    const sub = w.rivals.length ? `${left} of ${w.rivals.length} rival${w.rivals.length > 1 ? 's' : ''} left` : 'click something to inspect it';
+    return `<div class="name">Your colony</div><div class="role">Day ${w.dayInfo().day} · ${w.diff.name} · ${sub}</div>` +
       this.kv([
         ['Workers', `${n.foragers} foraging · ${n.inside} in the nest`],
         ['Soldiers', `${n.soldiers}${p.rally ? (p.rally.raid ? ' · raiding' : ' · at rally point') : ' · guarding'}`],
@@ -744,7 +811,9 @@ class UI {
       const name = slot === 'auto' ? 'Autosave' : `Slot ${slot}`;
       const row = document.createElement('div');
       row.className = 'slot';
-      const info = m ? `Day ${m.day} · ${m.ants} ants · ${(CFG.DIFFICULTY[m.diff] || {}).name || m.diff} · ${timeAgo(m.savedAt)}` : 'Empty';
+      const size = m && CFG.MAP.size[m.size];
+      const info = m ? `Day ${m.day} · ${m.ants} ants · ${(CFG.DIFFICULTY[m.diff] || {}).name || m.diff}` +
+        `${size ? `, ${size.name.toLowerCase()} map` : ''} · ${timeAgo(m.savedAt)}` : 'Empty';
       row.innerHTML = `<div class="slot-info"><b>${name}</b><span>${info}</span></div>`;
       const btns = document.createElement('div');
       btns.className = 'slot-btns';

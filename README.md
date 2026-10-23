@@ -4,24 +4,35 @@
 
 Anthill is a small strategy game about ants that runs right in your browser. Your workers find
 food on their own by following scent trails — you decide how the colony grows: what to dig under
-the ground, what to research, how many soldiers to raise and when to go to war with the red
-colony next door.
+the ground, what to research, how many soldiers to raise and when to go to war with the rival
+colonies next door.
 
 ## How to play
 
 **Play online:** https://1devi.github.io/anthill/ — works on computers, phones and tablets.
 
 Or download the project and open **`index.html`** in Chrome, Edge or Firefox — just double-click
-it. Nothing to install, no internet needed. Pick a difficulty and press **Start colony**.
+it. Nothing to install, no internet needed. Pick a difficulty, set up the map and press **Start colony**.
 
 | Difficulty | What to expect |
 | --- | --- |
 | **Peaceful** | No enemies. Watch the colony grow and experiment. |
-| **Normal** | A rival red colony and the occasional hungry spider. |
-| **Hard** | A stronger rival that attacks sooner, and more spiders. |
+| **Normal** | Rival colonies next door and the occasional hungry spider. |
+| **Hard** | Stronger rivals that attack sooner, and more spiders. |
 
-You lose if your queen dies or every ant is gone. On Normal and Hard you win by destroying the
-red colony's queen.
+You lose if your queen dies or every ant is gone. On Normal and Hard you win by killing every rival
+queen. With no rivals there is nothing to conquer — play as long as you like.
+
+### Map settings
+
+Below the difficulty you can set up the meadow. The start screen remembers your last choice.
+
+| Setting | Choices |
+| --- | --- |
+| **Map size** | Small, Medium (the usual) or Large. On a bigger meadow the rivals live further away, so their raids take longer to arrive — but your foragers walk further too. |
+| **Food** | Scarce, Normal or Rich: how many piles of seeds and berries grow on the meadow, and how big they are. |
+| **Rocks** | Few, Normal or Many. More rocks mean winding paths and longer trips. |
+| **Rival colonies** | 0 to 3. Each has its own colour — **red**, **amber** and **violet** — and starts raiding a couple of minutes after the one before it. Peaceful games have none. |
 
 ## Your colony
 
@@ -95,15 +106,18 @@ The **Colony orders** panel at the bottom sets how the colony behaves:
 | Scent trail | 3 | Paint a food scent — ants follow it in the direction you drag |
 | Rocks | 4 | Place rocks; ants walk around them |
 | Erase | 5 | Remove rocks and your scent marks |
-| Rally point | 6 | Send soldiers somewhere. Put it on the red nest to raid it |
+| Rally point | 6 | Send soldiers somewhere. Put it on a rival nest to raid it |
 
 ## Dangers
 
 - **Spiders** wander in from the edges and eat ants. A crowd of ants can bring one down — the
   carcass is a feast.
-- **The red colony** grows just like yours. From about the tenth minute it starts sending raiding
-  parties to your nest, a little bigger each time. Keep some soldiers, dig Guard Posts, and when
-  you are strong enough, raid them back.
+- **Rival colonies** grow just like yours. From about the tenth minute (sooner on Hard) the red
+  colony starts sending raiding parties to your nest, a little bigger each time; the amber and
+  violet colonies join in two and four minutes later. Keep some soldiers, dig Guard Posts, and when
+  you are strong enough, raid them back. With several rivals they also fight each other: their ants
+  clash when paths cross, and now and then one rival raids another instead of you — a good moment
+  to strike the weakened one.
 - **Night** falls every couple of minutes; **rain** washes away the scent trails.
 
 ## Controls
@@ -124,7 +138,8 @@ The **Colony orders** panel at the bottom sets how the colony behaves:
 | Help | H |
 | Cancel / deselect | Esc, right-click |
 
-Click or drag on the **minimap** to jump around the meadow.
+Click or drag on the **minimap** to jump around the meadow. Every colony has its own colour there —
+yours is the pale one — and spiders are dark dots with a white rim.
 
 **On a phone or tablet:** drag with one finger to move, pinch to zoom, tap to select or use a tool,
 and press and hold instead of right-clicking (cancel, recall soldiers, deselect). In the nest, the
@@ -172,14 +187,14 @@ What's coming next, roughly in this order:
   small screens.
 - [x] **Chronicle** — graphs of your population and food over the whole game, on the end screen and
   any time from the top bar.
-- [ ] **Map settings** — choose the map size, how much food and how many rocks there are, and fight
+- [x] **Map settings** — choose the map size, how much food and how many rocks there are, and fight
   up to three rival colonies.
 - [ ] **Seasons and winter** — plenty of food in spring and summer, less in autumn; in winter
   nothing grows and the colony lives on its stores.
 - [ ] **Scouts** — a fast new caste that explores far away and marks the food it finds.
 - [ ] **Fog of war** — you only see what your ants see. Scouts and patrols become essential.
 - [ ] **Aphids and ladybugs** — herd aphids on plants and milk them for honeydew; defend them from
-  ladybugs and the red colony.
+  ladybugs and rival colonies.
 - [ ] **Scenarios** — *Survive three winters*, *Hold five aphid herds*, *Destroy two colonies*.
 
 Ideas for later: more castes (big carriers, honeypot ants, winged queens that found new nests),

@@ -58,13 +58,35 @@ for (let i = 0; i < 60 * 60; i++) {
 console.log(`after 60 s more: original ${w.player.ants.length} ants, loaded ${w2.player.ants.length} ants`);
 console.log('save round-trip OK');
 
-// Version-1 saves (before the maps grew) carry no sizes: they must load as a 1600x1000 meadow
-// with a 1000x640 nest and the colonies in their old spots.
+// Map settings survive a save: three rivals on a large, rocky, food-rich meadow.
+const wm = new ctx.World({ difficulty: 'hard', seed: 5, settings: { size: 'large', food: 'rich', rocks: 'many', rivals: 3 } });
+for (let i = 0; i < 60 * 30; i++) wm.update(ctx.CFG.TICK);
+const jm = JSON.stringify(ctx.serializeWorld(wm));
+const wm2 = ctx.loadWorld(JSON.parse(jm));
+console.log(`3-rival save size: ${(jm.length / 1024).toFixed(1)} KB`);
+assert.strictEqual(wm2.W, 3200, 'large map width');
+assert.strictEqual(JSON.stringify(wm2.settings), JSON.stringify(wm.settings), 'map settings');
+assert.strictEqual(wm2.rivals.length, 3, 'rival count');
+assert.strictEqual(wm2.rivals.map((r) => r.adj).join(), 'red,amber,violet', 'rival names');
+assert.ok(wm2.rivals[2].raidGrace > wm2.rivals[0].raidGrace, 'staggered raids');
+assert.strictEqual(wm2.foodMul, wm.foodMul, 'food multiplier');
+wm.rivals.forEach((r, i) => {
+  assert.strictEqual(wm2.rivals[i].ants.length, r.ants.length, 'rival ants');
+  assert.strictEqual(Math.round(wm2.rivals[i].x), Math.round(r.x), 'rival position');
+});
+for (let i = 0; i < 600; i++) wm2.update(ctx.CFG.TICK);
+// Peaceful games never get rivals, whatever the settings say.
+assert.strictEqual(new ctx.World({ difficulty: 'peaceful', seed: 1, settings: { rivals: 3, size: 'small' } }).colonies.length, 1, 'peaceful');
+console.log('map settings OK');
+
+// Version-1 saves (before the maps grew) carry no sizes or map settings: they must load as a 1600x1000
+// meadow with a 1000x640 nest, one rival and the colonies in their old spots.
 const legacy = new ctx.World({ difficulty: 'normal', seed: 7, W: 1600, H: 1000 });
 for (let i = 0; i < 600; i++) legacy.update(ctx.CFG.TICK);
 const old = JSON.parse(JSON.stringify(ctx.serializeWorld(legacy)));
 delete old.W;
 delete old.H;
+delete old.settings;
 for (const c of old.colonies) {
   delete c.x;
   delete c.y;
@@ -79,5 +101,7 @@ assert.strictEqual(w3.walls.length, legacy.walls.length, 'legacy wall grid');
 assert.strictEqual(w3.player.nest.W, 1000, 'legacy nest width');
 assert.strictEqual(Math.round(w3.player.x), 300, 'legacy nest position');
 assert.strictEqual(Math.round(w3.rival.x), 1300, 'legacy rival position');
+assert.strictEqual(w3.rivals.length, 1, 'legacy saves have one rival');
+assert.strictEqual(w3.settings.size, 'small', 'legacy map counts as small');
 for (let i = 0; i < 600; i++) w3.update(ctx.CFG.TICK);
 console.log('legacy save OK');

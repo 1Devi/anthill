@@ -75,16 +75,17 @@ class Minimap {
       ctx.fill();
     }
     const dot = 1.6 / k;
+    // Every colony has one colour: its ants and its nest.
     for (const c of w.colonies) {
-      ctx.fillStyle = c.isPlayer ? '#f3e2c0' : '#ff5a3c';
+      ctx.fillStyle = Sprites.PAL[c.palette].map;
       for (const a of c.ants) if (!a.inside && !a.dead) ctx.fillRect(a.x - dot / 2, a.y - dot / 2, dot, dot);
     }
     for (const c of w.colonies) {
-      ctx.lineWidth = 1.5 / k;
+      ctx.lineWidth = (c.isPlayer ? 2.5 : 1.5) / k;
       ctx.strokeStyle = '#140c06';
-      ctx.fillStyle = c.alive ? (c.isPlayer ? '#e8b04a' : '#e0543a') : '#555';
+      ctx.fillStyle = c.alive ? Sprites.PAL[c.palette].map : '#555';
       ctx.beginPath();
-      ctx.arc(c.x, c.y, 4.5 / k, 0, TAU);
+      ctx.arc(c.x, c.y, (c.isPlayer ? 5 : 4.5) / k, 0, TAU);
       ctx.fill();
       ctx.stroke();
       if (c.underAttackT > 0 && Math.floor(w.time * 4) % 2) {
@@ -95,8 +96,9 @@ class Minimap {
         ctx.stroke();
       }
     }
+    // Spiders: dark blobs with a white rim, unlike any colony colour.
     for (const s of w.spiders) {
-      ctx.fillStyle = '#b06cff';
+      ctx.fillStyle = '#1a1210';
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 1 / k;
       ctx.beginPath();

@@ -125,16 +125,31 @@ class FoodSource {
   }
 }
 
+// Start-screen map options with defaults filled in. Peaceful games never have rivals.
+function mapSettings(diff, s = {}) {
+  const M = CFG.MAP, out = { ...M.defaults, ...s };
+  for (const k of ['size', 'food', 'rocks']) if (!M[k][out[k]]) out[k] = M.defaults[k];
+  out.rivals = diff.rival ? clamp(Math.round(out.rivals) || 0, 0, M.maxRivals) : 0;
+  return out;
+}
+
 class World {
   constructor(opts = {}) {
+    this.diffKey = opts.difficulty || 'normal';
+    this.diff = CFG.DIFFICULTY[this.diffKey];
+    this.settings = mapSettings(this.diff, opts.settings);
     // Saves carry their own size, so older, smaller maps still load.
-    this.W = opts.W || CFG.WORLD_W;
-    this.H = opts.H || CFG.WORLD_H;
+    const size = CFG.MAP.size[this.settings.size];
+    this.W = opts.W || size.W;
+    this.H = opts.H || size.H;
+    if (opts.W) {
+      const k = Object.keys(CFG.MAP.size).find((key) => CFG.MAP.size[key].W === this.W && CFG.MAP.size[key].H === this.H);
+      this.settings.size = k || 'custom';
+    }
+    this.foodMul = CFG.MAP.food[this.settings.food].mul;
     this.areaK = (this.W * this.H) / (1600 * 1000);
     this.gw = Math.ceil(this.W / CFG.CELL);
     this.gh = Math.ceil(this.H / CFG.CELL);
-    this.diffKey = opts.difficulty || 'normal';
-    this.diff = CFG.DIFFICULTY[this.diffKey];
     this.seed = opts.seed ?? (Math.random() * 1e9) | 0;
     this.walls = new Uint8Array(this.gw * this.gh);
     this.wallsVersion = 0;
@@ -150,14 +165,15 @@ class World {
     this.rain = 0;
     this.nextRain = rand(200, 340);
     this.spiderT = this.diff.spiders ? this.diff.spiderFirst : Infinity;
-    this.foodSpawnT = rand(20, 35);
+    this.foodSpawnT = this.regrowTime();
     this.feedCooldown = 0;
     this.stats = { kills: 0, spiders: 0 };
     this.result = null;
     this.victoryShown = false;
     this.speedMul = 1;
     this.player = null;
-    this.rival = null;
+    this.rivals = [];
+    this.rival = null; // the first rival, for code that only knows one
     // Chronicle: [t, ants, workers, soldiers, brood, food, foodCap, income/min, spent/min, rival ants]
     this.history = [];
     this.marks = []; // notable events for the chronicle: { t, kind, text }
@@ -192,28 +208,39 @@ class World {
 
   generate() {
     const noise = makeNoise2D(this.seed);
-    const P = { x: this.W * 0.1875, y: this.H * 0.64 }, R = { x: this.W * 0.8125, y: this.H * 0.34 };
-    const C = CFG.CELL;
+    const at = ([fx, fy]) => ({ x: this.W * fx, y: this.H * fy });
+    const P = at(CFG.PLAYER_AT), types = CFG.RIVALS.slice(0, this.settings.rivals);
+    const nests = [P, ...types.map((t) => at(t.at))];
+    const C = CFG.CELL, rock = CFG.MAP.rocks[this.settings.rocks].threshold;
     for (let cy = 0; cy < this.gh; cy++) {
       for (let cx = 0; cx < this.gw; cx++) {
         const x = (cx + 0.5) * C, y = (cy + 0.5) * C;
-        const near = Math.min(dist(x, y, P.x, P.y), dist(x, y, R.x, R.y));
+        let near = Infinity;
+        for (const n of nests) near = Math.min(near, dist(x, y, n.x, n.y));
         if (near < 110) continue;
         const v = noise.fbm(x * 0.0042, y * 0.0042, 4) - Math.max(0, (150 - near) / 400);
-        if (v > 0.665) this.walls[cy * this.gw + cx] = 1;
+        if (v > rock) this.walls[cy * this.gw + cx] = 1;
       }
     }
 
-    this.player = new Colony(this, { id: 0, name: 'Your colony', isPlayer: true, palette: 'player', x: P.x, y: P.y, ...this.diff.player });
+    this.player = new Colony(this, { id: 0, name: 'Your colony', adj: 'your', isPlayer: true, palette: 'player', x: P.x, y: P.y, ...this.diff.player });
     this.colonies.push(this.player);
-    if (this.diff.rival) {
-      this.rival = new Colony(this, { id: 1, name: 'Red colony', palette: 'rival', x: R.x, y: R.y, ...this.diff.ai });
-      this.colonies.push(this.rival);
-    }
+    // Rivals start raiding one after another rather than all at once.
+    this.rivals = types.map((t, i) => new Colony(this, {
+      id: i + 1, name: t.name, adj: t.adj, palette: t.palette, ...nests[i + 1], ...this.diff.ai,
+      raidGrace: this.diff.ai.raidGrace + i * CFG.RIVAL_STAGGER,
+    }));
+    this.colonies.push(...this.rivals);
+    this.rival = this.rivals[0] || null;
 
     for (let i = 0; i < 3; i++) this.placeFoodNear(P.x, P.y, 120, 250, chance(0.7) ? 'seeds' : 'berries');
-    if (this.rival) for (let i = 0; i < 2; i++) this.placeFoodNear(R.x, R.y, 120, 250, 'seeds');
-    for (let i = 0; i < Math.round(5 * this.areaK); i++) this.spawnNaturalFood();
+    for (const r of this.rivals) for (let i = 0; i < 2; i++) this.placeFoodNear(r.x, r.y, 120, 250, 'seeds');
+    for (let i = 0; i < Math.round(5 * this.areaK * this.foodMul); i++) this.spawnNaturalFood();
+  }
+
+  // Seconds until the next natural pile appears: the same rate per area on every map size.
+  regrowTime() {
+    return rand(CFG.FOOD_REGROW[0], CFG.FOOD_REGROW[1]) / this.areaK;
   }
 
   spotFree(x, y, r = 10) {
@@ -239,7 +266,8 @@ class World {
       const x = rand(40, this.W - 40), y = rand(40, this.H - 40);
       if (this.colonies.some((c) => dist(x, y, c.x, c.y) < 140)) continue;
       if (this.spotFree(x, y, 14)) {
-        return this.addFood(x, y, randInt(CFG.FOOD_PILE[0], CFG.FOOD_PILE[1]), chance(0.6) ? 'seeds' : 'berries', false);
+        const amount = Math.round(randInt(CFG.FOOD_PILE[0], CFG.FOOD_PILE[1]) * this.foodMul);
+        return this.addFood(x, y, amount, chance(0.6) ? 'seeds' : 'berries', false);
       }
     }
     return null;
@@ -427,7 +455,7 @@ class World {
           for (const other of this.colonies) {
             if (other === col || !other.alive) continue;
             if (dist2(ant.x, ant.y, other.x, other.y) < (CFG.NEST_R + 6) ** 2) {
-              other.hurtQueen(ant.dmg * CFG.RAID_DMG * sdt);
+              other.hurtQueen(ant.dmg * CFG.RAID_DMG * sdt, col);
               ant.fightT = 0.3;
             }
           }
@@ -450,9 +478,9 @@ class World {
 
     this.foodSpawnT -= dt;
     if (this.foodSpawnT <= 0) {
-      this.foodSpawnT = rand(20, 35);
+      this.foodSpawnT = this.regrowTime();
       const natural = this.foods.filter((f) => f.kind === 'seeds' || f.kind === 'berries').length;
-      if (natural < CFG.NATURAL_FOOD * this.areaK) this.spawnNaturalFood();
+      if (natural < CFG.NATURAL_FOOD * this.areaK * this.foodMul) this.spawnNaturalFood();
     }
 
     if (this.rain > 0) {
@@ -477,9 +505,10 @@ class World {
       this.result = { win: false, title: 'The queen has fallen', text: 'Without a queen the colony cannot survive.' };
     } else if (p.ants.length === 0 && p.brood.length === 0 && p.food < CFG.CASTE.worker.cost) {
       this.result = { win: false, title: 'The colony has died out', text: 'No workers left and no food to raise new ones.' };
-    } else if (this.rival && !this.rival.alive && !this.victoryShown) {
+    } else if (this.rivals.length && !this.victoryShown && this.rivals.every((r) => !r.alive)) {
       this.victoryShown = true;
-      this.result = { win: true, title: 'Victory!', text: 'The red queen is dead. The meadow belongs to your colony.' };
+      const who = this.rivals.length === 1 ? `The ${this.rivals[0].adj} queen is dead.` : 'Every rival queen is dead.';
+      this.result = { win: true, title: 'Victory!', text: `${who} The meadow belongs to your colony.` };
     }
   }
 }

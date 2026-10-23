@@ -29,7 +29,7 @@ class AutoPlayer {
     this.dig(c);
     if (this.research) this.study(c);
     if (this.react) {
-      const threat = c.underAttackT > 0 || (this.w.rival && this.w.rival.rally);
+      const threat = c.underAttackT > 0 || this.w.rivals.some((r) => r.rally && r.rally.target === c);
       c.soldierRatio = threat ? 0.35 : 0.15;
     }
   }
@@ -46,7 +46,7 @@ class AutoPlayer {
     if (this.research && !count('hall') && size >= 30) return 'hall';
     if (size >= 40 && count('garden') < 1 + Math.floor(t / 600)) return 'garden';
     if (size >= 45 && !count('infirmary')) return 'infirmary';
-    if (this.w.rival && this.w.rival.raids > 0 && count('guard') < 2) return 'guard';
+    if (this.w.rivals.some((r) => r.raids > 0) && count('guard') < 2) return 'guard';
     return null;
   }
 

@@ -4,9 +4,12 @@
 
 const Sprites = (() => {
   const S = 4;
+  // map: the colony's colour on the minimap; mound: soil tint of its nest mound.
   const PAL = {
-    player: { body: '#2e1d13', head: '#26170e', leg: '#1d120b', mand: '#120a06', shine: 'rgba(255,232,205,0.32)' },
-    rival: { body: '#b8361f', head: '#a02b17', leg: '#6d1b0e', mand: '#3e0c05', shine: 'rgba(255,226,200,0.42)' },
+    player: { body: '#2e1d13', head: '#26170e', leg: '#1d120b', mand: '#120a06', shine: 'rgba(255,232,205,0.32)', map: '#f3e2c0', mound: [110, 85, 55] },
+    rival: { body: '#b8361f', head: '#a02b17', leg: '#6d1b0e', mand: '#3e0c05', shine: 'rgba(255,226,200,0.42)', map: '#ff5a3c', mound: [150, 70, 50] },
+    rival2: { body: '#c98a12', head: '#ad730c', leg: '#6b4507', mand: '#3a2503', shine: 'rgba(255,240,200,0.45)', map: '#ff9d1f', mound: [150, 118, 40] },
+    rival3: { body: '#7440a8', head: '#61338f', leg: '#3c1d5a', mand: '#200d30', shine: 'rgba(235,215,255,0.42)', map: '#b98cff', mound: [112, 72, 120] },
   };
   const SHAPE = {
     worker: { len: 7, head: [0.12, 0.1], thorax: [0.15, 0.075], gaster: [0.22, 0.155], leg: 0.62, mand: 0.05, ant: 0.5 },

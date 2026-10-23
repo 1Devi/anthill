@@ -18,6 +18,7 @@ class Colony {
     this.w = w;
     this.id = o.id;
     this.name = o.name;
+    this.adj = o.adj || ''; // 'red', 'amber', … for messages
     this.isPlayer = !!o.isPlayer;
     this.palette = o.palette;
     this.x = o.x;
@@ -61,6 +62,7 @@ class Colony {
     this.aiT = 2;
     this.aiGrowT = 40;
     this.aiResearchT = o.researchEvery || Infinity;
+    this.raidGrace = o.raidGrace ?? Infinity; // no raids before this game time
     this.raids = 0;
     for (let i = 0; i < (o.workers || 0); i++) this.spawnAnt('worker', true);
     for (let i = 0; i < (o.soldiers || 0); i++) this.spawnAnt('soldier', true);
@@ -102,14 +104,14 @@ class Colony {
     this.w.log(text, kind);
   }
 
-  hurtQueen(amount) {
+  hurtQueen(amount, by) {
     this.queen.hp -= amount * (1 - Math.min(0.75, this.caps.guard || 0));
     this.underAttackT = 2;
     this.alarm.splat(this.x, this.y, 150, 1);
     if (this.isPlayer) {
       this.warn('raid', 'Enemies are attacking your queen!', 'danger', 10);
       this.w.sfx('alarm');
-    } else this.warn('raided', 'Your soldiers are storming the red nest!', 'good', 15);
+    } else if (by && by.isPlayer) this.warn('raided', `Your soldiers are storming the ${this.adj} nest!`, 'good', 15);
   }
 
   setRally(x, y) {
@@ -427,7 +429,12 @@ class Colony {
         this.brood.length = 0;
         this.rally = null;
         this.researching = null;
-        w.log(this.isPlayer ? 'Your queen has died!' : 'The red queen is dead!', this.isPlayer ? 'danger' : 'good');
+        if (this.isPlayer) w.log('Your queen has died!', 'danger');
+        else {
+          const left = w.rivals.filter((r) => r.alive).length;
+          const more = left ? ` ${left} rival ${left > 1 ? 'colonies remain' : 'colony remains'}.` : '';
+          w.log(`The ${this.adj} queen is dead!${more}`, 'good');
+        }
       } else if (!this.starving) {
         this.queen.hp = Math.min(this.queen.maxHp, this.queen.hp + CFG.QUEEN.regen * dt);
       }
@@ -479,7 +486,6 @@ class Colony {
     if (this.aiT > 0) return;
     this.aiT = 2;
     const ai = this.w.diff.ai;
-    const p = this.w.player;
     this.soldierRatio = this.underAttackT > 0 ? 0.45 : ai.soldierRatio;
 
     this.aiGrowT -= 2;
@@ -508,18 +514,32 @@ class Colony {
     // Raids start small and grow; a few soldiers always stay home.
     const party = Math.min(ai.raidMax, ai.raidSize + this.raids * ai.raidGrowth);
     const raiders = this.ants.filter((a) => a.raider && !a.dead);
-    if (!this.rally && p.alive && this.w.time > ai.raidGrace && this.counts.soldiers >= party + 3) {
+    const target = this.rally && this.rally.target;
+    if (!this.rally && this.w.time > this.raidGrace && this.counts.soldiers >= party + 3) {
+      const t = this.raidTarget();
+      if (!t) return;
       this.raids++;
       let left = party;
       for (const a of this.ants) {
         a.raider = a.caste === 'soldier' && left-- > 0;
       }
-      this.setRally(p.x, p.y);
-      this.w.log(`The red colony sends ${party} soldiers against your nest!`, 'danger');
-      this.w.sfx('horn');
-    } else if (this.rally && (raiders.length < party * 0.35 || !p.alive)) {
+      this.setRally(t.x, t.y);
+      if (t.isPlayer) {
+        this.w.log(`The ${this.adj} colony sends ${party} soldiers against your nest!`, 'danger');
+        this.w.sfx('horn');
+      } else this.w.log(`The ${this.adj} colony sends ${party} soldiers against the ${t.adj} nest.`, 'info');
+    } else if (this.rally && (raiders.length < party * 0.35 || !(target && target.alive))) {
       this.rally = null;
       for (const a of raiders) a.raider = false;
     }
+  }
+
+  // Whom to raid: the player is the favourite target, but rivals also raid each other now and then.
+  raidTarget() {
+    const others = this.w.colonies.filter((c) => c !== this && c.alive);
+    if (others.length <= 1) return others[0] || null;
+    const weight = (c) => (c.isPlayer ? CFG.RAID_PLAYER_WEIGHT : 1);
+    let r = Math.random() * others.reduce((s, c) => s + weight(c), 0);
+    return others.find((c) => (r -= weight(c)) < 0) || others[0];
   }
 }

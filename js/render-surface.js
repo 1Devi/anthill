@@ -233,7 +233,7 @@ class SurfaceRenderer {
     ctx.beginPath();
     ctx.arc(0, 0, R, 0, TAU);
     ctx.fill();
-    const tint = col.palette === 'rival' ? [150, 70, 50] : [110, 85, 55];
+    const tint = Sprites.PAL[col.palette].mound;
     for (let i = 0; i < 700; i++) {
       const a = rand(0, TAU), d = 7 + Math.pow(Math.random(), 0.7) * (R - 9);
       const v = rand(-30, 40);
@@ -293,10 +293,12 @@ class SurfaceRenderer {
 
   updatePhero(showOwn, showRival) {
     const w = this.w, d = this.pimg.data, n = w.gw * w.gh;
-    const p = w.player, r = w.rival;
+    const p = w.player;
     const layers = [];
     if (showOwn) layers.push([p.home.d, PHERO_COLORS.home, 1], [p.foodP.d, PHERO_COLORS.food, 1], [p.alarm.d, PHERO_COLORS.alarm, 1]);
-    if (showRival && r) layers.push([r.home.d, PHERO_COLORS.rivalHome, 0.6], [r.foodP.d, PHERO_COLORS.rivalFood, 0.6], [r.alarm.d, PHERO_COLORS.alarm, 0.6]);
+    if (showRival) {
+      for (const r of w.rivals) layers.push([r.home.d, PHERO_COLORS.rivalHome, 0.6], [r.foodP.d, PHERO_COLORS.rivalFood, 0.6], [r.alarm.d, PHERO_COLORS.alarm, 0.6]);
+    }
     for (let i = 0; i < n; i++) {
       let sr = 0, sg = 0, sb = 0, sv = 0;
       for (let l = 0; l < layers.length; l++) {

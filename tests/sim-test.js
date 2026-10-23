@@ -1,5 +1,5 @@
 // Headless simulation check with the scripted AutoPlayer:
-//   node tests/sim-test.js [difficulty] [minutes] [seed]
+//   node tests/sim-test.js [difficulty] [minutes] [seed] [size=… food=… rocks=… rivals=…]
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -13,11 +13,15 @@ vm.runInContext(src + '\nthis.World = World; this.CFG = CFG; this.AutoPlayer = A
 const diff = process.argv[2] || 'normal';
 const minutes = Number(process.argv[3] || 10);
 const seed = Number(process.argv[4] || 12345);
-const w = new ctx.World({ difficulty: diff, seed });
+// Map options, e.g. size=large rivals=3 food=scarce rocks=many
+const settings = Object.fromEntries(process.argv.slice(5).map((a) => a.split('=')).map(([k, v]) => [k, k === 'rivals' ? Number(v) : v]));
+const w = new ctx.World({ difficulty: diff, seed, settings });
 const bot = new ctx.AutoPlayer(w);
 
 const wallFrac = w.walls.reduce((s, v) => s + v, 0) / w.walls.length;
-console.log(`difficulty=${diff} seed=${seed} map=${w.W}x${w.H} walls=${(wallFrac * 100).toFixed(1)}% foods=${w.foods.length}`);
+const st = w.settings;
+console.log(`difficulty=${diff} seed=${seed} map=${w.W}x${w.H} (${st.size}, food ${st.food}, rocks ${st.rocks}, ${st.rivals} rival${st.rivals === 1 ? '' : 's'})` +
+  ` walls=${(wallFrac * 100).toFixed(1)}% foods=${w.foods.length}`);
 
 const fmt = (c) => {
   const n = c.counts, f = c.flows();
