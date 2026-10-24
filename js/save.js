@@ -99,12 +99,13 @@ function serializeWorld(w) {
     time: r2(w.time),
     tick: w.tick,
     walls: packBytes(w.walls),
-    foods: w.foods.map((f) => [r2(f.x), r2(f.y), r2(f.amount), r2(f.max), f.kind]),
+    foods: w.foods.map((f) => (f.owner === null ? [r2(f.x), r2(f.y), r2(f.amount), r2(f.max), f.kind] : [r2(f.x), r2(f.y), r2(f.amount), r2(f.max), f.kind, f.owner])),
     spiders: w.spiders.filter((s) => !s.dead && !s.gone).map((s) => [
       r2(s.x), r2(s.y), r2(s.a), r2(s.hp), s.power, r2(s.t), r2(s.life), s.state === 'leave' ? 1 : 0, s.eaten,
     ]),
     rain: r2(w.rain),
     nextRain: r2(w.nextRain),
+    seasonT0: r2(w.seasonT0),
     spiderT: Number.isFinite(w.spiderT) ? r2(w.spiderT) : null,
     foodSpawnT: r2(w.foodSpawnT),
     feedCooldown: r2(w.feedCooldown),
@@ -174,9 +175,10 @@ function loadWorld(data) {
   w.tick = data.tick;
   w.walls = unpackBytes(data.walls, w.walls.length);
   w.wallsVersion++;
-  w.foods = data.foods.map(([x, y, amount, max, kind]) => {
+  w.foods = data.foods.map(([x, y, amount, max, kind, owner]) => {
     const f = new FoodSource(x, y, max, kind);
     f.amount = amount;
+    f.owner = owner ?? null;
     return f;
   });
   w.spiders = data.spiders.map(([x, y, a, hp, power, t, life, leave, eaten]) => {
@@ -188,6 +190,9 @@ function loadWorld(data) {
     rain: data.rain, nextRain: data.nextRain, foodSpawnT: data.foodSpawnT, feedCooldown: data.feedCooldown,
     spiderT: data.spiderT === null ? Infinity : data.spiderT, stats: data.stats, victoryShown: data.victoryShown,
   });
+  // Saves from before the seasons start their first spring at the beginning of the day they were loaded on.
+  w.seasonT0 = data.seasonT0 ?? Math.floor(data.time / CFG.DAY_LENGTH) * CFG.DAY_LENGTH;
+  w.syncSeason();
   if (data.history) {
     w.history = data.history;
     w.marks = data.marks || [];

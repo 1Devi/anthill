@@ -47,6 +47,7 @@ explore elsewhere.
 - **Workers** gather food. Some of them stay inside the nest to nurse the brood, dig chambers and
   tend gardens — the young ones; old workers go out to forage.
 - **Soldiers** guard the nest, fight spiders and raiders, and go wherever you place a rally point.
+  When a fight is over they head back to their post, finding their way around rocks.
 - **The queen** lays the eggs. Egg → larva → pupa → ant takes about half a minute. Protect her: if
   she dies, the game is over.
 
@@ -54,6 +55,11 @@ explore elsewhere.
 the top shows how much food you have and your **net income per minute** — hover over it to see
 what comes in (foraging, gardens) and what goes out (eating, eggs, digging, research). The queen
 lays eggs on her own as long as there is food to spare.
+
+**When the stores are full**, foragers leave what they bring in a pile by the entrance and carry it
+in as soon as there is room. Your ants leave that pile alone until then — but rival ants may help
+themselves. Only food that actually goes into the stores counts as income; the food tooltip shows how
+much is piling up outside. Dig a **Granary** to make room.
 
 ## The nest
 
@@ -118,7 +124,23 @@ The **Colony orders** panel at the bottom sets how the colony behaves:
   you are strong enough, raid them back. With several rivals they also fight each other: their ants
   clash when paths cross, and now and then one rival raids another instead of you — a good moment
   to strike the weakened one.
-- **Night** falls every couple of minutes; **rain** washes away the scent trails.
+- **Night** falls every couple of minutes; **rain** washes away the scent trails (in winter it snows).
+
+## Seasons
+
+The year turns: each season lasts two days, about five minutes, and the game starts in spring. The
+season is shown above the clock at the top — hover it to see what it changes.
+
+| Season | What changes |
+| --- | --- |
+| **Spring** | Fresh food sprouts across the meadow and grows back fast. |
+| **Summer** | Plenty of food. |
+| **Autumn** | Food grows slowly. The colony starts putting food aside for the winter, so the queen lays fewer eggs. |
+| **Winter** | Snow. Nothing grows, and the seeds and berries left on the meadow rot. Ants crawl, eat less and freeze if they wander far from the nest; the queen lays slowly. Spiders and raiders stay away. |
+
+The colony lives through the winter on its stores, and it can only keep as much as your storage
+holds — dig a **Granary** or two in autumn. **Fungus Gardens** keep growing all winter. The food
+tooltip shows how much is kept for the winter; the Chronicle shows winters as pale bands.
 
 ## Controls
 
@@ -163,10 +185,12 @@ in your browser, so clearing site data removes them — export the important one
 ## Tips
 
 - Early on, dig **Living Quarters** and a **Nursery** — the starting nest fills up fast.
+- Food piling up by the entrance means the stores are full: time for a **Granary**.
 - If the food number in the bar is red, stop digging or researching for a while, or lower the
   building budget.
 - Before minute ten, raise a few more soldiers and dig a **Guard Post**.
-- A **Fungus Garden** is a steady income that no spider can steal.
+- A **Fungus Garden** is a steady income that no spider can steal — and it keeps growing in winter.
+- Before winter, make room in the stores: the colony can only put aside what your granaries hold.
 - Hover anything in the resource bar for a breakdown of where the numbers come from.
 
 ## Questions
@@ -189,7 +213,7 @@ What's coming next, roughly in this order:
   any time from the top bar.
 - [x] **Map settings** — choose the map size, how much food and how many rocks there are, and fight
   up to three rival colonies.
-- [ ] **Seasons and winter** — plenty of food in spring and summer, less in autumn; in winter
+- [x] **Seasons and winter** — plenty of food in spring and summer, less in autumn; in winter
   nothing grows and the colony lives on its stores.
 - [ ] **Scouts** — a fast new caste that explores far away and marks the food it finds.
 - [ ] **Fog of war** — you only see what your ants see. Scouts and patrols become essential.

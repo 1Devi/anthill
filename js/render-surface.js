@@ -2,6 +2,8 @@
 // Top-down surface renderer: terrain, rocks, pheromone glow, food, nests, ants and spiders.
 
 const WS = 1.5; // pixels per world unit for the baked terrain / rock layers
+const SNOW_Q = 3; // world units per pixel of the snow cover
+const SNOW_LEVELS = 4; // snow cover is drawn from this many depths, from a few drifts to a full blanket
 const FS = 4; // pixels per world unit for cached food piles
 
 const PHERO_COLORS = {
@@ -12,12 +14,31 @@ const PHERO_COLORS = {
   rivalFood: [255, 170, 60],
 };
 
+// How the season looks: a colour wash over the meadow and how much snow lies on it. A new season
+// fades in over the first part of its first day; snow builds up early in winter and melts in spring.
+const SEASON_TINT = {
+  spring: [150, 215, 120, 0.05],
+  summer: [255, 220, 130, 0.04],
+  autumn: [214, 124, 40, 0.14],
+  winter: [196, 214, 240, 0.12],
+};
+
+function seasonLook(w) {
+  const s = w.seasonInfo(), k = s.first ? 1 : clamp(s.frac / 0.15, 0, 1);
+  const a = SEASON_TINT[s.prev.id], b = SEASON_TINT[s.def.id];
+  let snow = 0;
+  if (s.def.cold) snow = clamp(s.frac / 0.3, 0, 1);
+  else if (s.prev.cold && !s.first) snow = clamp(1 - s.frac / 0.25, 0, 1);
+  return { id: s.def.id, prev: s.prev.id, k, snow, falling: s.def.cold, tint: a.map((v, i) => lerp(v, b[i], k)) };
+}
+
 const CRUMB_COLORS = {
   seeds: ['#d9b26a', '#c99a4e', '#e6c784', '#b88a45'],
   berries: ['#b2223a', '#8e1b4a', '#c43b3b', '#a3123a'],
   sugar: ['#f6f3ea', '#ece6d6', '#fffdf6'],
   corpse: ['#2a1a12', '#3a2518', '#1e130c'],
   prey: ['#5a3b33', '#7b4e3e', '#3b2a26', '#8a5a44'],
+  surplus: ['#d9b26a', '#c99a4e', '#e6c784', '#b2223a', '#b88a45', '#c43b3b'],
 };
 
 class SurfaceRenderer {
@@ -26,6 +47,8 @@ class SurfaceRenderer {
     this.frame = 0;
     this.foodCache = new Map();
     this.drops = [];
+    this.flakes = [];
+    this.leaves = [];
   }
 
   build(w) {
@@ -49,6 +72,50 @@ class SurfaceRenderer {
     this.psctx.filter = 'blur(0.7px)';
     this.foodCache.clear();
     this.mounds = new Map(w.colonies.map((c) => [c, this.makeMound(c)]));
+    this.snowField = null; // made the first time snow falls
+    this.snowLevels = [];
+  }
+
+  // Snow cover at one depth (1..SNOW_LEVELS): drifts with crisp edges, a superset of the shallower ones.
+  snowLevel(level) {
+    if (this.snowLevels[level]) return this.snowLevels[level];
+    const w = this.w, lw = Math.ceil(w.W / SNOW_Q), lh = Math.ceil(w.H / SNOW_Q);
+    if (!this.snowField) {
+      const noise = makeNoise2D(w.seed ^ 0x5a0f);
+      this.snowField = new Float32Array(lw * lh);
+      for (let y = 0; y < lh; y++) {
+        for (let x = 0; x < lw; x++) {
+          const n = noise.fbm(x * SNOW_Q * 0.011, y * SNOW_Q * 0.011, 4) * 0.9 + noise(x * SNOW_Q * 0.07, y * SNOW_Q * 0.07) * 0.1;
+          this.snowField[y * lw + x] = clamp((n - 0.5) * 3.2 + 0.5, 0, 1);
+        }
+      }
+    }
+    // Even the deepest snow leaves a few bare patches of brown earth.
+    const t = 1 - (level / SNOW_LEVELS) * 0.86, c = document.createElement('canvas');
+    c.width = lw;
+    c.height = lh;
+    const ctx = c.getContext('2d'), img = ctx.createImageData(lw, lh);
+    for (let i = 0; i < lw * lh; i++) {
+      const n = this.snowField[i], a = clamp((n - t + 0.05) / 0.1, 0, 1);
+      img.data[i * 4] = 238 + n * 10;
+      img.data[i * 4 + 1] = 243 + n * 8;
+      img.data[i * 4 + 2] = 255;
+      img.data[i * 4 + 3] = a * 240;
+    }
+    ctx.putImageData(img, 0, 0);
+    return (this.snowLevels[level] = c);
+  }
+
+  // Deeper snow covers more ground; partial depths blend the two nearest levels.
+  drawSnow(ctx, amount, alpha = 1) {
+    const x = amount * SNOW_LEVELS, lo = Math.floor(x), f = x - lo, w = this.w;
+    ctx.globalAlpha = alpha;
+    if (lo >= 1) ctx.drawImage(this.snowLevel(lo), 0, 0, w.W, w.H);
+    if (lo < SNOW_LEVELS && f > 0.02) {
+      ctx.globalAlpha = f * alpha;
+      ctx.drawImage(this.snowLevel(lo + 1), 0, 0, w.W, w.H);
+    }
+    ctx.globalAlpha = 1;
   }
 
   // ---------- baked layers ----------
@@ -326,9 +393,10 @@ class SurfaceRenderer {
     this.psctx.drawImage(this.phero, 0, 0);
   }
 
-  drawPhero(ctx, alpha) {
+  // Trails glow additively, except over deep snow, where adding light would make them vanish.
+  drawPhero(ctx, alpha, snow = 0) {
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalCompositeOperation = snow > 0.3 ? 'source-over' : 'lighter';
     ctx.globalAlpha = alpha;
     ctx.drawImage(this.psoft, 0, 0, this.w.W, this.w.H);
     ctx.restore();
@@ -353,13 +421,20 @@ class SurfaceRenderer {
     ctx.setTransform(z, 0, 0, z, ox, oy);
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.bg, 0, 0, w.W, w.H);
+    const day = w.dayInfo(), look = seasonLook(w);
+    // Snow lies on the ground; rocks stay on top of it, so ants' obstacles remain visible, with a light frost.
+    if (look.snow > 0.01) this.drawSnow(ctx, look.snow);
     ctx.drawImage(this.walls, 0, 0, w.W, w.H);
-
-    const day = w.dayInfo();
+    if (look.snow > 0.01) this.drawSnow(ctx, look.snow, 0.12);
+    const [tr, tg, tb, ta] = look.tint;
+    if (ta > 0.005) {
+      ctx.fillStyle = `rgba(${tr | 0},${tg | 0},${tb | 0},${ta})`;
+      ctx.fillRect(0, 0, w.W, w.H);
+    }
     const trails = g.show.phero || g.show.rival;
     if (trails) {
       if (this.frame % 2 === 0) this.updatePhero(g.show.phero, g.show.rival);
-      this.drawPhero(ctx, 0.5);
+      this.drawPhero(ctx, 0.5, look.snow);
     }
 
     for (const c of w.colonies) {
@@ -398,12 +473,15 @@ class SurfaceRenderer {
       }
     }
 
-    if (trails && day.night > 0.05) this.drawPhero(ctx, day.night * 0.35);
+    if (trails && day.night > 0.05) this.drawPhero(ctx, day.night * 0.35, look.snow);
 
     this.drawOverlays(ctx, g, day);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (w.rain > 0) this.drawRain(ctx, g);
+    // In winter the rain falls as snow; in autumn leaves drift down.
+    if (look.falling) this.drawSnowfall(ctx, g, w.rain > 0 ? 1 : 0.3);
+    else if (w.rain > 0) this.drawRain(ctx, g);
+    if (look.id === 'autumn') this.drawLeaves(ctx, g, look.k);
   }
 
   drawAnts(ctx, g, z, ox, oy, inView) {
@@ -582,6 +660,54 @@ class SurfaceRenderer {
     ctx.ellipse(x, y, 10, 5, 0, 0, TAU);
     ctx.stroke();
     ctx.globalAlpha = 1;
+  }
+
+  drawSnowfall(ctx, g, intensity) {
+    const W = g.canvas.width, H = g.canvas.height, dpr = g.dpr, n = Math.round(60 + 260 * intensity);
+    if (intensity > 0.5) {
+      ctx.fillStyle = 'rgba(205,215,235,0.16)';
+      ctx.fillRect(0, 0, W, H);
+    }
+    while (this.flakes.length < n) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, r: rand(0.8, 2.2), v: rand(0.5, 1.2), ph: rand(0, TAU) });
+    ctx.fillStyle = 'rgba(250,252,255,0.85)';
+    for (let i = 0; i < n; i++) {
+      const f = this.flakes[i];
+      f.ph += 0.03;
+      f.y += (1 + intensity * 2.2) * f.v * dpr;
+      f.x += (Math.sin(f.ph) * 0.6 - intensity * 1.5 * f.v) * dpr;
+      if (f.y > H + 4) {
+        f.y = -4;
+        f.x = Math.random() * (W + 200);
+      }
+      if (f.x < -10) f.x += W + 20;
+      ctx.fillRect(f.x, f.y, f.r * dpr, f.r * dpr);
+    }
+  }
+
+  drawLeaves(ctx, g, alpha) {
+    const W = g.canvas.width, H = g.canvas.height, dpr = g.dpr;
+    while (this.leaves.length < 18) {
+      this.leaves.push({ x: Math.random() * W, y: Math.random() * H, a: rand(0, TAU), spin: rand(-0.05, 0.05), v: rand(0.5, 1.1), ph: rand(0, TAU), c: pick(['#c8692a', '#d99a32', '#a8461f', '#b8842c']) });
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.85 * alpha;
+    for (const l of this.leaves) {
+      l.ph += 0.02;
+      l.a += l.spin;
+      l.y += 0.9 * l.v * dpr;
+      l.x += Math.sin(l.ph) * 1.2 * dpr;
+      if (l.y > H + 10) {
+        l.y = -10;
+        l.x = Math.random() * W;
+      }
+      ctx.setTransform(1, 0, 0, 1, l.x, l.y);
+      ctx.rotate(l.a);
+      ctx.fillStyle = l.c;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 4.5 * dpr, 2.2 * dpr * Math.abs(Math.cos(l.ph * 2)) + 0.6 * dpr, 0, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   drawRain(ctx, g) {

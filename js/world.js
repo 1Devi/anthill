@@ -72,12 +72,17 @@ class PheroMap {
   }
 }
 
+// Seasons with their defaults filled in.
+const SEASONS = CFG.SEASONS.map((s) => ({ regrow: 1, bloom: 0, rot: 0, speed: 1, upkeep: 1, lay: 1, cold: false, calm: false, ...s }));
+const NATURAL_FOOD = new Set(['seeds', 'berries']);
+
 const FOOD_KINDS = {
   seeds: 'Seeds',
   berries: 'Berries',
   sugar: 'Sugar',
   corpse: 'Remains',
   prey: 'Spider carcass',
+  surplus: 'Surplus food', // left by the entrance while the colony's stores are full
 };
 
 let FOOD_ID = 1;
@@ -90,6 +95,7 @@ class FoodSource {
     this.amount = amount;
     this.max = amount;
     this.kind = kind;
+    this.owner = null; // surplus piles: id of the colony that left it
     this.layout();
   }
 
@@ -116,10 +122,11 @@ class FoodSource {
     return FOOD_KINDS[this.kind] || 'Food';
   }
 
+  // A growing pile gets room to spare, so its crumbs are not re-laid on every addition.
   grow(n) {
     this.amount += n;
     if (this.amount > this.max) {
-      this.max = this.amount;
+      this.max = Math.max(this.amount, this.max * 1.3);
       this.layout();
     }
   }
@@ -164,6 +171,12 @@ class World {
     this.hash = new SpatialHash(this.W, this.H, 24);
     this.rain = 0;
     this.nextRain = rand(200, 340);
+    this.seasonT0 = 0; // when the first spring began (older saves start their seasons when loaded)
+    this.season = SEASONS[0];
+    this.seasonIdx = 0;
+    this.winterWarned = false;
+    this.rotT = 0;
+    this.coldT = 0;
     this.spiderT = this.diff.spiders ? this.diff.spiderFirst : Infinity;
     this.foodSpawnT = this.regrowTime();
     this.feedCooldown = 0;
@@ -280,10 +293,11 @@ class World {
     return this.walls[((y / CFG.CELL) | 0) * this.gw + ((x / CFG.CELL) | 0)] === 1;
   }
 
-  nearestFood(x, y, r) {
+  // Nearest food within r. A colony's ants leave its own surplus pile alone while its stores are full.
+  nearestFood(x, y, r, col) {
     let best = null, bd = Infinity;
     for (const f of this.foods) {
-      if (f.amount <= 0) continue;
+      if (f.amount <= 0 || (col && f.owner === col.id && col.full)) continue;
       const lim = r + f.r0;
       const d = dist2(x, y, f.x, f.y);
       if (d < lim * lim && d < bd) {
@@ -326,6 +340,49 @@ class World {
     for (const c of this.colonies) if (dist(x, y, c.x, c.y) < 26) return { type: 'colony', obj: c };
     for (const f of this.foods) if (dist(x, y, f.x, f.y) < f.r0 + 5) return { type: 'food', obj: f };
     return null;
+  }
+
+  // The season now: which one, how far into it (0..1), seconds left and the year.
+  seasonInfo() {
+    const len = CFG.SEASON_DAYS * CFG.DAY_LENGTH, t = Math.max(0, this.time - this.seasonT0);
+    const k = Math.floor(t / len), i = k % SEASONS.length;
+    return {
+      i, def: SEASONS[i], prev: SEASONS[(i + SEASONS.length - 1) % SEASONS.length], next: SEASONS[(i + 1) % SEASONS.length],
+      frac: (t % len) / len, left: len - (t % len), len, year: Math.floor(k / SEASONS.length) + 1, first: k === 0,
+    };
+  }
+
+  // Catch up with the current season without announcing it (new game, loaded save).
+  syncSeason() {
+    const s = this.seasonInfo();
+    this.season = s.def;
+    this.seasonIdx = s.i;
+    this.winterWarned = s.def.cold || (s.i === SEASONS.length - 2 && s.frac >= 0.5);
+  }
+
+  updateSeason() {
+    const s = this.seasonInfo(), d = s.def;
+    this.season = d;
+    if (s.i !== this.seasonIdx) {
+      this.seasonIdx = s.i;
+      this.winterWarned = d.cold;
+      this.log(d.news, d.cold ? 'warn' : 'info');
+      if (d.calm) {
+        for (const sp of this.spiders) {
+          sp.state = 'leave';
+          sp.target = null;
+        }
+      }
+      // Spring bloom: the meadow sprouts fresh food at once.
+      const cap = CFG.NATURAL_FOOD * this.areaK * this.foodMul;
+      for (let i = 0; i < Math.round(d.bloom * this.areaK * this.foodMul); i++) {
+        if (this.foods.filter((f) => NATURAL_FOOD.has(f.kind)).length >= cap) break;
+        this.spawnNaturalFood();
+      }
+    } else if (!this.winterWarned && SEASONS[(s.i + 1) % SEASONS.length].cold && s.frac >= 0.5) {
+      this.winterWarned = true;
+      this.log('Winter comes tomorrow — fill the granaries.', 'warn');
+    }
   }
 
   dayInfo() {
@@ -391,6 +448,7 @@ class World {
   update(dt) {
     this.time += dt;
     this.tick++;
+    this.updateSeason();
 
     if (this.tick % CFG.PHERO_EVAP_EVERY === 0) {
       const step = dt * CFG.PHERO_EVAP_EVERY * (this.rain > 0 ? 4 : 1);
@@ -465,7 +523,8 @@ class World {
   }
 
   updateEvents(dt) {
-    if (this.diff.spiders) {
+    const season = this.season;
+    if (this.diff.spiders && !season.calm) {
       this.spiderT -= dt;
       if (this.spiderT <= 0) {
         const n = 1 + Math.floor(this.time / 600);
@@ -476,26 +535,59 @@ class World {
       }
     }
 
-    this.foodSpawnT -= dt;
+    // Natural food regrows with the season (not at all in winter).
+    this.foodSpawnT -= dt * season.regrow;
     if (this.foodSpawnT <= 0) {
       this.foodSpawnT = this.regrowTime();
-      const natural = this.foods.filter((f) => f.kind === 'seeds' || f.kind === 'berries').length;
+      const natural = this.foods.filter((f) => NATURAL_FOOD.has(f.kind)).length;
       if (natural < CFG.NATURAL_FOOD * this.areaK * this.foodMul) this.spawnNaturalFood();
     }
+    // Winter: seeds and berries left on the meadow slowly rot away.
+    this.rotT += dt;
+    if (this.rotT >= 1) {
+      if (season.rot) {
+        for (const f of this.foods) {
+          if (!NATURAL_FOOD.has(f.kind)) continue;
+          f.amount -= f.amount * season.rot * this.rotT;
+          if (f.amount < 4) f.amount = 0;
+        }
+      }
+      this.rotT = 0;
+    }
+    if (season.cold) this.freeze(dt);
 
     if (this.rain > 0) {
       this.rain -= dt;
-      if (this.rain <= 0) this.log('The rain has stopped.', 'info');
+      if (this.rain <= 0) this.log(season.cold ? 'The snowstorm is over.' : 'The rain has stopped.', 'info');
     } else {
       this.nextRain -= dt;
       if (this.nextRain <= 0) {
         this.rain = rand(18, 30);
         this.nextRain = rand(220, 380);
-        this.log('Rain! Pheromone trails are washing away.', 'warn');
+        this.log(season.cold ? 'A snowstorm! Trails are buried under the snow.' : 'Rain! Pheromone trails are washing away.', 'warn');
       }
     }
-    this.speedMul = this.rain > 0 ? 0.85 : 1;
+    this.speedMul = (this.rain > 0 ? 0.85 : 1) * season.speed;
     if (this.feedCooldown > 0) this.feedCooldown -= dt;
+  }
+
+  // Winter cold: ants far from their own nest slowly lose health.
+  freeze(dt) {
+    this.coldT -= dt;
+    if (this.coldT > 0) return;
+    this.coldT += 0.5;
+    const r2 = CFG.COLD.range ** 2, hurt = CFG.COLD.dmg * 0.5;
+    let freezing = 0;
+    for (const c of this.colonies) {
+      for (const a of c.ants) {
+        if (a.dead || a.inside || dist2(a.x, a.y, c.x, c.y) < r2) continue;
+        a.hp -= hurt;
+        a.hitT = 0.15;
+        if (a.hp <= 0) a.die(this);
+        if (c.isPlayer) freezing++;
+      }
+    }
+    if (freezing >= 3) this.player.warn('cold', 'Your ants are freezing far from the nest.', 'warn', 90);
   }
 
   checkResult() {

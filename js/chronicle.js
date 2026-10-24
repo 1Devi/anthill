@@ -150,6 +150,22 @@ class ChronicleView {
     ctx.textBaseline = 'top';
     for (let t = 0; t <= g.tMax; t += tStep) ctx.fillText(`${Math.round(t / 60)} min`, g.x(t), g.H - g.pad.b + 5);
 
+    // Winters as pale bands: the stores usually dip there.
+    const len = CFG.SEASON_DAYS * CFG.DAY_LENGTH, wi = SEASONS.findIndex((s) => s.cold);
+    if (wi >= 0) {
+      for (let t0 = (this.world.seasonT0 || 0) + wi * len; t0 < g.tMax; t0 += len * SEASONS.length) {
+        const x0 = g.x(Math.max(0, t0)), x1 = g.x(Math.min(g.tMax, t0 + len));
+        ctx.fillStyle = 'rgba(169,200,240,0.08)';
+        ctx.fillRect(x0, g.pad.t, x1 - x0, g.H - g.pad.t - g.pad.b);
+        if (chart === this.charts[0] && x1 - x0 > 40) {
+          ctx.fillStyle = '#a9c8f0';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText('winter', x0 + 4, g.pad.t + 3);
+        }
+      }
+    }
+
     if (d.length < 2) {
       ctx.textBaseline = 'middle';
       ctx.fillText('Not enough history yet — play a little longer.', g.W / 2, g.H / 2);

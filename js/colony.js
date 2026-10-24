@@ -2,7 +2,7 @@
 // Colony economy: food, upkeep, the queen, brood, task allocation, research and rival AI.
 
 const NEXT_STAGE = { egg: 'larva', larva: 'pupa', pupa: null };
-const newLedger = () => ({ gathered: 0, farmed: 0, eaten: 0, eggs: 0, digging: 0, research: 0 });
+const newLedger = () => ({ gathered: 0, farmed: 0, eaten: 0, eggs: 0, digging: 0, research: 0, surplus: 0 });
 // Multipliers changed by research (zone is a level count, not a multiplier).
 const BASE_MODS = { dmg: 1, hp: 1, soldier: 1, speed: 1, sense: 1, trail: 1, carry: 1, lay: 1, dev: 1, life: 1, dig: 1, farm: 1, zone: 0 };
 const RESEARCH_BY_ID = Object.fromEntries(CFG.RESEARCH.map((r) => [r.id, r]));
@@ -73,6 +73,38 @@ class Colony {
     return this.nest ? this.nest.caps : this.aiCaps;
   }
 
+  // Steps (grid cells) from every free cell to the nest around the rocks, for soldiers heading home.
+  // Rebuilt when rocks change, at most once a second.
+  homeField() {
+    const w = this.w;
+    if (this.field && (this.fieldWalls === w.wallsVersion || w.time - this.fieldT < 1)) return this.field;
+    const gw = w.gw, gh = w.gh, n = gw * gh, walls = w.walls;
+    const f = this.field && this.field.length === n ? this.field : new Uint16Array(n);
+    f.fill(65535);
+    const q = new Int32Array(n);
+    const start = clamp((this.y / CFG.CELL) | 0, 0, gh - 1) * gw + clamp((this.x / CFG.CELL) | 0, 0, gw - 1);
+    let head = 0, tail = 0;
+    f[start] = 0;
+    q[tail++] = start;
+    while (head < tail) {
+      const i = q[head++], cx = i % gw, cy = (i / gw) | 0, d = f[i] + 1;
+      for (let dy = -1; dy <= 1; dy++) {
+        const y = cy + dy;
+        if (y < 0 || y >= gh) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const x = cx + dx, j = y * gw + x;
+          if (x < 0 || x >= gw || f[j] <= d || walls[j]) continue;
+          f[j] = d;
+          q[tail++] = j;
+        }
+      }
+    }
+    this.field = f;
+    this.fieldWalls = w.wallsVersion;
+    this.fieldT = w.time;
+    return f;
+  }
+
   spawnAnt(caste, initial = false) {
     const a = new Ant(this, caste, this.x + rand(-5, 5), this.y + rand(-5, 5));
     if (initial) a.age = rand(0, a.life * 0.5);
@@ -81,17 +113,32 @@ class Colony {
     return a;
   }
 
-  // Food enters the stores; foraged food gets the difficulty multiplier, farmed food does not.
+  get full() {
+    return this.food >= this.caps.food - 0.5;
+  }
+
+  // Food enters the stores; foraged food gets the difficulty multiplier, farmed food does not. What the
+  // stores can't hold, foragers leave in a pile by the entrance, to carry in once there is room; full
+  // gardens simply grow nothing more. Only what is actually stored counts as income.
   addFood(n, source = 'gathered') {
     if (source === 'gathered') n *= this.forageMul;
-    if (this.hasProjects()) this.buildFund = Math.min(CFG.BUILD_FUND_CAP, this.buildFund + n * this.buildShare);
-    this.stats.collected += n;
-    this.ledger[source] += n;
-    this.food += n;
-    if (this.food > this.caps.food) {
-      this.food = this.caps.food;
-      if (this.isPlayer) this.warn('full', 'Food stores are full — dig a Granary.', 'warn', 40);
+    const stored = Math.min(n, Math.max(0, this.caps.food - this.food)), extra = n - stored;
+    if (extra > 0.001) {
+      if (source === 'gathered') this.dropSurplus(extra);
+      if (this.isPlayer) this.warn('full', 'Food stores are full: the surplus piles up by the entrance. Dig a Granary.', 'warn', 40);
     }
+    if (this.hasProjects()) this.buildFund = Math.min(CFG.BUILD_FUND_CAP, this.buildFund + stored * this.buildShare);
+    this.stats.collected += stored;
+    this.ledger[source] += stored;
+    this.food += stored;
+  }
+
+  // The surplus pile sits just outside the entrance, on the side facing the middle of the meadow.
+  dropSurplus(n) {
+    const w = this.w, a = Math.atan2(w.H / 2 - this.y, w.W / 2 - this.x);
+    const f = w.addFood(this.x + Math.cos(a) * 20, this.y + Math.sin(a) * 20, n, 'surplus');
+    f.owner = this.id;
+    this.ledger.surplus += n;
   }
 
   storeFood(n) {
@@ -223,10 +270,21 @@ class Colony {
     return !!(this.researching || (this.nest && this.nest.job));
   }
 
+  // Food kept back from eggs for the winter, as real colonies do: through autumn the colony builds up
+  // what the winter will eat, and in winter it keeps what the rest of it needs. Digging and research
+  // may still use it.
+  winterStock() {
+    const s = this.w.seasonInfo();
+    let need = 0;
+    if (s.def.cold) need = this.upkeep * s.left;
+    else if (s.next.cold) need = this.upkeep * s.next.upkeep * s.len * s.frac;
+    return Math.min(need, this.caps.food * CFG.WINTER_STOCK);
+  }
+
   // While something is being dug or researched, a share of income is set aside for it (buildFund);
   // eggs may only use the rest. Plenty of stored food is free for both.
   eggSpendable() {
-    return this.food - this.layReserve() - this.buildFund;
+    return this.food - this.layReserve() - this.buildFund - this.winterStock();
   }
 
   buildSpendable() {
@@ -254,7 +312,7 @@ class Colony {
     }
     if (this.eggSpendable() < CFG.CASTE[caste].cost) return;
     this.layEgg(caste);
-    this.layT = CFG.QUEEN.layInterval / this.mods.lay;
+    this.layT = CFG.QUEEN.layInterval / (this.mods.lay * this.w.season.lay);
   }
 
   updateBrood(dt) {
@@ -405,6 +463,7 @@ class Colony {
     let upkeep = this.alive ? CFG.QUEEN.upkeep : 0;
     for (const a of this.ants) upkeep += CFG.CASTE[a.caste].upkeep;
     upkeep += n.larvae * CFG.BROOD.larvaUpkeep;
+    upkeep *= w.season.upkeep; // everyone eats less in the winter torpor
     this.upkeep = upkeep;
     this.ledger.eaten += Math.min(this.food, upkeep * dt);
     this.food -= upkeep * dt;
@@ -515,7 +574,8 @@ class Colony {
     const party = Math.min(ai.raidMax, ai.raidSize + this.raids * ai.raidGrowth);
     const raiders = this.ants.filter((a) => a.raider && !a.dead);
     const target = this.rally && this.rally.target;
-    if (!this.rally && this.w.time > this.raidGrace && this.counts.soldiers >= party + 3) {
+    const calm = this.w.season.calm; // no raids in winter; one under way is called off
+    if (!this.rally && !calm && this.w.time > this.raidGrace && this.counts.soldiers >= party + 3) {
       const t = this.raidTarget();
       if (!t) return;
       this.raids++;
@@ -528,7 +588,7 @@ class Colony {
         this.w.log(`The ${this.adj} colony sends ${party} soldiers against your nest!`, 'danger');
         this.w.sfx('horn');
       } else this.w.log(`The ${this.adj} colony sends ${party} soldiers against the ${t.adj} nest.`, 'info');
-    } else if (this.rally && (raiders.length < party * 0.35 || !(target && target.alive))) {
+    } else if (this.rally && (raiders.length < party * 0.35 || !(target && target.alive) || calm)) {
       this.rally = null;
       for (const a of raiders) a.raider = false;
     }

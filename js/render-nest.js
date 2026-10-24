@@ -53,7 +53,7 @@ class NestRenderer {
     this.nest = nest;
     this.seed = seed;
     this.soil = this.makeSoil(nest, seed);
-    this.grass = this.makeGrass(nest, seed);
+    this.grass = {}; // per season, made when first needed
     this.wallTile = this.makeWallTile(seed);
     this.cloud = this.makeCloud();
     const rng = mulberry32(seed ^ 0x5ca1);
@@ -247,9 +247,16 @@ class NestRenderer {
     return c;
   }
 
-  // Grass blades along the surface, in two layers; the ground around the entrance is bare.
-  makeGrass(n, seed) {
+  // Grass blades along the surface, in two layers, coloured by the season; the ground around the entrance is bare.
+  makeGrass(n, seed, season) {
     const rng = mulberry32(seed ^ 0x6a55);
+    const look = {
+      spring: { hue: [85, 120], sat: [45, 65], light: [27, 44], height: 1, flowers: 40 },
+      summer: { hue: [80, 115], sat: [40, 65], light: [26, 44], height: 1, flowers: 26 },
+      autumn: { hue: [32, 58], sat: [35, 55], light: [26, 40], height: 0.9, flowers: 0 },
+      winter: { hue: [38, 55], sat: [8, 20], light: [30, 44], height: 0.6, flowers: 0 },
+    }[season];
+    const between = ([a, b]) => a + rng() * (b - a);
     const c = document.createElement('canvas');
     c.width = n.W * NS;
     c.height = 60 * NS;
@@ -261,8 +268,9 @@ class NestRenderer {
       for (let i = 0; i < (800 * n.W) / 1000; i++) {
         const x = rng() * n.W, near = Math.abs(x - ex);
         if (near < 52) continue;
-        const h = (back ? 10 + rng() * 30 : 5 + rng() * 22) * Math.min(1, (near - 52) / 70 + 0.3), lean = (rng() - 0.5) * 12;
-        ctx.strokeStyle = back ? `hsl(${90 + rng() * 25},${30 + rng() * 20}%,${15 + rng() * 10}%)` : `hsl(${80 + rng() * 35},${40 + rng() * 25}%,${26 + rng() * 18}%)`;
+        const h = (back ? 10 + rng() * 30 : 5 + rng() * 22) * Math.min(1, (near - 52) / 70 + 0.3) * look.height, lean = (rng() - 0.5) * 12;
+        const hue = between(look.hue), sat = between(look.sat), light = between(look.light);
+        ctx.strokeStyle = back ? `hsl(${hue + 6},${sat * 0.75}%,${light * 0.6}%)` : `hsl(${hue},${sat}%,${light}%)`;
         ctx.lineWidth = 0.8 + rng() * 1.3;
         ctx.beginPath();
         ctx.moveTo(x, base + 3);
@@ -271,7 +279,7 @@ class NestRenderer {
       }
     }
     // A few small flowers and clover heads.
-    for (let i = 0; i < (26 * n.W) / 1000; i++) {
+    for (let i = 0; i < (look.flowers * n.W) / 1000; i++) {
       const x = rng() * n.W;
       if (Math.abs(x - ex) < 110) continue;
       const h = 12 + rng() * 18, y = base - h;
@@ -367,6 +375,25 @@ class NestRenderer {
       ctx.fill();
     }
     ctx.restore();
+    // A snow cap along the top, shown in winter.
+    const cap = document.createElement('canvas');
+    cap.width = c.width;
+    cap.height = c.height;
+    const cc = cap.getContext('2d');
+    cc.scale(MS, MS);
+    cc.translate((W + 16) / 2, H + 8);
+    cc.strokeStyle = 'rgba(244,248,255,0.95)';
+    cc.lineWidth = 3.2;
+    cc.lineCap = 'round';
+    cc.beginPath();
+    for (let x = -W / 2 - 2; x <= W / 2 + 2; x += 2) {
+      if (Math.abs(x) < 8) {
+        cc.moveTo(x + 2, top(x + 2) + 2.4);
+        continue;
+      }
+      cc.lineTo(x, Math.min(3, top(x) + 2.4));
+    }
+    cc.stroke();
     // The entrance: a dark opening in the crater at the top.
     const hole = ctx.createRadialGradient(0, -H + 5, 0, 0, -H + 5, 7);
     hole.addColorStop(0, '#080402');
@@ -376,7 +403,7 @@ class NestRenderer {
     ctx.beginPath();
     ctx.ellipse(0, -H + 5.5, 7.5, 3.4, 0, 0, TAU);
     ctx.fill();
-    m = { canvas: c, W: W + 16, H: H + 12, top: -H - 8, height: H };
+    m = { canvas: c, cap, W: W + 16, H: H + 12, top: -H - 8, height: H };
     this.mounds.set(level, m);
     return m;
   }
@@ -747,7 +774,7 @@ class NestRenderer {
     const top = n.surfaceY;
     ctx.drawImage(this.cav, 0, top * CS, n.W * CS, (n.H - top) * CS, 0, top, n.W, n.H - top);
     this.drawPlanned(ctx, n);
-    this.drawSurface(ctx, n, vis, g.world.dayInfo());
+    this.drawSurface(ctx, n, vis, g.world.dayInfo(), seasonLook(g.world));
     this.drawZoneEdge(ctx, n, g);
 
     this.drawStores(ctx, n, col);
@@ -802,13 +829,26 @@ class NestRenderer {
       ctx.arc(mx + 4, 31, 8.5, 0, TAU);
       ctx.fill();
     }
+    const look = seasonLook(w);
+    if (look.snow > 0.01) {
+      ctx.fillStyle = `rgba(150,160,178,${0.4 * look.snow * (0.4 + 0.6 * day.light)})`;
+      ctx.fillRect(vis.left, top, vis.right - vis.left, sy - top);
+    }
     ctx.globalAlpha = 0.1 + 0.75 * day.light;
     for (const c of this.clouds) {
       const span = n.W + 600, x = ((c.x + w.time * c.v) % span) - 300;
       ctx.drawImage(this.cloud, x, c.y, 130 * c.s, 45 * c.s);
     }
     ctx.globalAlpha = 1;
-    if (w.rain > 0) {
+    if (look.falling) {
+      const n = w.rain > 0 ? 160 : 60, span = vis.right - vis.left + 40, h = sy - top;
+      ctx.fillStyle = 'rgba(250,252,255,0.85)';
+      for (let i = 0; i < n; i++) {
+        const v = 0.6 + (i % 5) * 0.15, x = vis.left + ((i * 97.3 + Math.sin(w.time * 0.8 + i) * 6 - w.time * (w.rain > 0 ? 18 : 4)) % span + span) % span;
+        const y = top + ((i * 53.7 + w.time * 14 * v) % h);
+        ctx.fillRect(x, y, 1.4, 1.4);
+      }
+    } else if (w.rain > 0) {
       ctx.fillStyle = 'rgba(70,80,100,0.5)';
       ctx.fillRect(vis.left, top, vis.right - vis.left, sy - top);
       ctx.strokeStyle = 'rgba(190,210,240,0.45)';
@@ -842,13 +882,34 @@ class NestRenderer {
   }
 
   // Grass along the surface and the heap of dug-out soil over the entrance.
-  drawSurface(ctx, n, vis, day) {
-    for (let gx = Math.floor(vis.left / n.W) * n.W; gx < vis.right; gx += n.W) {
-      ctx.drawImage(this.grass, gx, n.surfaceY - 46, n.W, 60);
+  drawSurface(ctx, n, vis, day, look) {
+    const grass = (id) => this.grass[id] || (this.grass[id] = this.makeGrass(n, this.seed, id));
+    const layers = look.k < 1 ? [[look.prev, 1], [look.id, look.k]] : [[look.id, 1]];
+    for (const [id, a] of layers) {
+      ctx.globalAlpha = a;
+      for (let gx = Math.floor(vis.left / n.W) * n.W; gx < vis.right; gx += n.W) {
+        ctx.drawImage(grass(id), gx, n.surfaceY - 46, n.W, 60);
+      }
     }
+    ctx.globalAlpha = 1;
     const e = n.chambers[0], built = n.chambers.filter((c) => c.built && c.type !== 'entrance').length;
     const m = this.moundSprite(Math.min(10, Math.max(0, built - 2)));
     ctx.drawImage(m.canvas, e.x - m.W / 2, n.surfaceY - m.H + 4, m.W, m.H);
+    if (look.snow > 0.01) {
+      ctx.globalAlpha = look.snow;
+      ctx.drawImage(m.cap, e.x - m.W / 2, n.surfaceY - m.H + 4, m.W, m.H);
+      ctx.fillStyle = '#f2f6ff';
+      ctx.beginPath();
+      ctx.moveTo(vis.left, n.surfaceY + 3);
+      for (let x = Math.floor(vis.left / 6) * 6; x <= vis.right + 6; x += 6) {
+        const away = Math.abs(x - e.x) < m.W / 2 - 4 ? 0 : 1;
+        ctx.lineTo(x, n.surfaceY - away * (2.5 + 1.4 * Math.sin(x * 0.07) + 1.1 * Math.sin(x * 0.023)) * look.snow);
+      }
+      ctx.lineTo(vis.right + 6, n.surfaceY + 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
     if (day.night > 0.02) {
       const tint = ctx.createLinearGradient(0, n.surfaceY - 50, 0, n.surfaceY - 20);
       tint.addColorStop(0, 'rgba(8,14,40,0)');

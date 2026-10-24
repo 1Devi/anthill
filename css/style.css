@@ -95,8 +95,15 @@ kbd {
 @keyframes res-flash { to { border-color: var(--red); box-shadow: inset 0 0 10px rgba(224, 84, 58, 0.45); } }
 
 .top-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.clock { display: flex; gap: 8px; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; white-space: nowrap; margin-right: 4px; }
+/* Two lines like the resource tiles: season (and weather) above, day and time below. */
+.clock { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; white-space: nowrap; margin-right: 4px; }
+.clock-top { display: flex; gap: 6px; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
 #weather { color: var(--blue); }
+#season { font-weight: 600; }
+#season.spring { color: #8fd46a; }
+#season.summer { color: var(--amber); }
+#season.autumn { color: #e08a3c; }
+#season.winter { color: #a9c8f0; }
 .seg { display: flex; border: 1px solid var(--frame-hi); border-radius: 8px; overflow: hidden; background: #140e09; }
 .seg button {
   background: transparent; border: 0; padding: 6px 11px; font-size: 13px; color: var(--muted);
@@ -377,19 +384,19 @@ input[type="range"] { width: 100%; accent-color: var(--amber); margin: 4px 0 0; 
 .btn.ghost { background: transparent; }
 
 /* ---------- narrower screens ---------- */
-@media (max-width: 1520px) {
+@media (max-width: 1540px) {
   .brand-name, .clock #weather { display: none; }
   .res { padding: 0 8px 0 5px; }
 }
 /* Compact resource bar: only food keeps its per-minute line. */
-@media (max-width: 1420px) {
+@media (max-width: 1440px) {
   .res .sub { display: none; }
   .res#r-food .sub { display: block; }
   #r-pop .res-text, #r-workers .res-text { width: 54px; }
   #r-brood .res-text { width: 48px; }
   #r-soldiers .res-text, #r-queen .res-text { width: 36px; }
 }
-@media (max-width: 1300px) {
+@media (max-width: 1360px) {
   .clock { display: none; }
 }
 @media (max-width: 1240px) {
@@ -402,7 +409,7 @@ input[type="range"] { width: 100%; accent-color: var(--amber); margin: 4px 0 0; 
   .portrait canvas { width: 96px; height: 96px; }
   #minimap { width: 200px; }
 }
-@media (max-width: 1180px) {
+@media (max-width: 1250px) {
   #topbar { gap: 8px; }
   .resources { gap: 4px; }
   .res { padding: 0 6px 0 4px; gap: 5px; }

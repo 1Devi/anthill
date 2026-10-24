@@ -254,6 +254,20 @@ function difficultySection() {
     [{ cols: [{ h: 'Setting', l: true }, ...keys.map((k) => ({ h: D[k].name }))], rows }]);
 }
 
+// ---------- seasons ----------
+
+function seasonSection() {
+  const len = CFG.SEASON_DAYS * CFG.DAY_LENGTH, x = (v) => (v === 1 ? '—' : `×${v}`);
+  const rows = SEASONS.map((s, i) => [s.name, `${secs(i * len)} – ${secs((i + 1) * len)}`, s.regrow ? x(s.regrow) : 'none',
+    s.bloom ? `${s.bloom} piles per 1.6 M` : '—', s.rot ? `${pct(s.rot)}/s` : '—', x(s.speed), x(s.upkeep), x(s.lay),
+    s.cold ? `−${CFG.COLD.dmg} HP/s beyond ${CFG.COLD.range}` : '—', s.calm ? 'yes' : '—']);
+  addSection('seasons', 'Seasons', `${CFG.SEASON_DAYS} days (${secs(len)}) each, a year is ${secs(len * SEASONS.length)}. Times are from the start of the game. ` +
+    'Regrow scales how fast natural food appears; rot is the share of every seed and berry pile lost per second; ' +
+    'speed, upkeep and laying apply to every colony. Calm: no spiders spawn (those around leave) and no raids start (those under way end).',
+  [{ cols: [{ h: 'Season', l: true }, { h: 'First year' }, { h: 'Regrow' }, { h: 'Bloom' }, { h: 'Rot' }, { h: 'Ant speed' }, { h: 'Upkeep' },
+    { h: 'Laying' }, { h: 'Cold' }, { h: 'Calm' }], rows }]);
+}
+
 // ---------- map options ----------
 
 // Share of the meadow that becomes rock for a noise threshold, sampled over a few seeds.
@@ -344,7 +358,7 @@ function snapshot(w) {
     alive: p.alive, ants: p.ants.length, workers: n.workers, soldiers: n.soldiers, brood: p.brood.length, food: p.food,
     income: f.income, spent: f.spent, net: f.net, tech: Object.values(p.tech).reduce((a, b) => a + b, 0),
     chambers: p.nest.chambers.filter((c) => c.built && c.type !== 'entrance').length, queen: p.queen.hp,
-    rivalAnts: sum((r) => r.ants.length), rivalSoldiers: sum((r) => r.counts.soldiers),
+    rivalAnts: sum((r) => r.ants.length), rivalSoldiers: sum((r) => r.counts.soldiers), season: w.season.name,
   };
 }
 
@@ -416,13 +430,13 @@ function renderSim(runs, minutes) {
     if (!alive.length) break;
     const a = (k) => alive.reduce((s, r) => s + r.mins[m][k], 0) / alive.length;
     const net = a('net');
-    rows.push([m + 1, `${alive.length}/${runs.length}`, fx(a('ants'), 0), fx(a('workers'), 0), fx(a('soldiers'), 0), fx(a('brood'), 0), fx(a('food'), 0),
+    rows.push([m + 1, alive[0].mins[m].season, `${alive.length}/${runs.length}`, fx(a('ants'), 0), fx(a('workers'), 0), fx(a('soldiers'), 0), fx(a('brood'), 0), fx(a('food'), 0),
       `<span class="up">+${fx(a('income'), 0)}</span>`, `<span class="down">−${fx(a('spent'), 0)}</span>`,
       `<span class="${net >= 0 ? 'up' : 'down'}">${net >= 0 ? '+' : '−'}${fx(Math.abs(net), 0)}</span>`,
       fx(a('tech'), 1), fx(a('chambers'), 1), fx(a('queen'), 0), fx(a('rivalAnts'), 0), fx(a('rivalSoldiers'), 0)]);
   }
   document.getElementById('sim-minutes').innerHTML = tableHtml([
-    { h: 'Min', l: true }, { h: 'Alive' }, { h: 'Ants' }, { h: 'Workers' }, { h: 'Soldiers' }, { h: 'Brood' }, { h: 'Food' },
+    { h: 'Min', l: true }, { h: 'Season', l: true }, { h: 'Alive' }, { h: 'Ants' }, { h: 'Workers' }, { h: 'Soldiers' }, { h: 'Brood' }, { h: 'Food' },
     { h: 'Income/min' }, { h: 'Spent/min' }, { h: 'Net/min' }, { h: 'Research' }, { h: 'Chambers' }, { h: 'Queen HP' }, { h: 'Rival ants' }, { h: 'Rival soldiers' },
   ], rows);
 }
@@ -437,6 +451,7 @@ researchSection();
 threatSection();
 difficultySection();
 mapSection();
+seasonSection();
 constantsSection();
 sections.push({ id: 'sim', title: 'Simulation' });
 document.getElementById('nav').innerHTML = sections.map((s) => `<a href="#${s.id}">${s.title}</a>`).join('');

@@ -27,6 +27,11 @@ class Ant {
     this.trailT = 0; // time spent following a food scent without finding food
     this.exploreT = 0; // while > 0 the ant ignores food scent and explores
     this.fightT = 0;
+    this.calmT = 0; // soldiers: ignore alarm scent for a while after reaching a fight that is over
+    this.detourT = 0; // soldiers: walking around an obstacle instead of straight at the goal
+    this.lastD = Infinity;
+    this.progT = 0;
+    this.stuck = 0;
     this.hitT = 0;
     this.boost = 1;
     this.anim = Math.random() * 4;
@@ -90,7 +95,7 @@ class Ant {
         this.state = 'return';
         return;
       }
-      const f = w.nearestFood(this.x, this.y, CFG.FOOD_SENSE * col.mods.sense);
+      const f = w.nearestFood(this.x, this.y, CFG.FOOD_SENSE * col.mods.sense, col);
       if (f) {
         if (dist2(this.x, this.y, f.x, f.y) < f.pickR * f.pickR) {
           this.carry = Math.min(CFG.CARRY * col.mods.carry, f.amount);
@@ -209,10 +214,16 @@ class Ant {
     this.target = null;
     this.boost = 1;
 
-    if (((w.tick + this.id) & 1) === 0 && col.alarm.get(this.x, this.y) > 0.02) {
-      this.follow(col.alarm, w, 0.35);
-      this.a += (Math.random() - 0.5) * CFG.WANDER * 0.5 * dt;
-      return;
+    // Alarm scent leads to a fight. Where it no longer gets stronger in any direction and no enemy is
+    // in sight, the fight is over: stop circling the spot and go back to the post for a while.
+    if (this.calmT > 0) this.calmT -= dt;
+    else if (((w.tick + this.id) & 1) === 0 && col.alarm.get(this.x, this.y) > 0.02) {
+      if (this.rises(col.alarm)) {
+        this.follow(col.alarm, w, 0.35);
+        this.a += (Math.random() - 0.5) * CFG.WANDER * 0.5 * dt;
+        return;
+      }
+      this.calmT = rand(4, 6);
     }
 
     // The nest under attack overrides any rally point: everyone runs home to defend the queen.
@@ -221,10 +232,57 @@ class Ant {
     const rally = col.rally && (col.isPlayer || this.raider) ? col.rally : null;
     const goal = defend ? col : rally || col;
     const R = defend ? 25 : rally ? (rally.raid ? 10 : 45) : CFG.PATROL_R;
-    if (dist2(this.x, this.y, goal.x, goal.y) > R * R) {
-      this.a = turnTowards(this.a, Math.atan2(goal.y - this.y, goal.x - this.x), (defend || rally ? 3 : 1.5) * dt);
+    const d2 = dist2(this.x, this.y, goal.x, goal.y);
+    if (d2 > R * R) {
+      const toGoal = Math.atan2(goal.y - this.y, goal.x - this.x);
+      // No progress for a few seconds means rocks are in the way: walk off to one side for a while.
+      this.progT -= dt;
+      if (this.progT <= 0) {
+        const d = Math.sqrt(d2);
+        this.stuck = this.lastD - d < 8 ? this.stuck + 1 : 0;
+        this.lastD = d;
+        this.progT = 1.5;
+        if (this.stuck >= 2) {
+          this.stuck = 0;
+          this.detourT = rand(2, 4.5);
+          this.a = toGoal + (Math.random() < 0.5 ? 1 : -1) * rand(1.4, 2.8);
+        }
+      }
+      // Heading home from afar, walk down the colony's path field: it leads around any rocks.
+      if (goal === col && d2 > 60 * 60) this.a = turnTowards(this.a, this.homeway(w), (defend ? 4 : 2.5) * dt);
+      else if (this.detourT > 0) this.detourT -= dt;
+      else this.a = turnTowards(this.a, toGoal, (defend || rally ? 3 : 1.5) * dt);
+    } else {
+      this.lastD = Infinity;
+      this.stuck = 0;
     }
     this.a += (Math.random() - 0.5) * CFG.WANDER * dt;
+  }
+
+  // The direction, among eight, that gets closest to the nest by the colony's path field.
+  homeway(w) {
+    const f = this.colony.homeField(), C = CFG.CELL, r = 12;
+    let best = this.a, bd = Infinity;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * TAU, x = this.x + Math.cos(a) * r, y = this.y + Math.sin(a) * r;
+      if (x < 0 || y < 0 || x >= w.W || y >= w.H || w.isWall(this.x + Math.cos(a) * r * 0.5, this.y + Math.sin(a) * r * 0.5)) continue;
+      const v = f[((y / C) | 0) * w.gw + ((x / C) | 0)];
+      if (v < bd) {
+        bd = v;
+        best = a;
+      }
+    }
+    return best;
+  }
+
+  // Whether the scent is noticeably stronger a sensor's length away in some direction than right here.
+  rises(map) {
+    const here = map.sample(this.x, this.y), d = CFG.SENSOR_DIST;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * TAU;
+      if (map.sample(this.x + Math.cos(a) * d, this.y + Math.sin(a) * d) > here * 1.1 + 0.01) return true;
+    }
+    return false;
   }
 
   sense(map, w, ang) {

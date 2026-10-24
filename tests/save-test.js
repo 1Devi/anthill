@@ -49,6 +49,8 @@ assert.strictEqual(w2.player.tech.chitin, 1, 'research levels');
 assert.strictEqual(w2.player.mods.hp, w.player.mods.hp, 'research modifiers');
 assert.strictEqual(w2.player.researching.id, 'mandibles', 'research in progress');
 assert.strictEqual(Math.round(w2.player.ants[0].maxHp), Math.round(w.player.ants[0].maxHp), 'ant stats follow research');
+assert.strictEqual(w2.seasonT0, w.seasonT0, 'season start');
+assert.strictEqual(w2.season.id, w.season.id, 'season');
 
 // Both copies keep running without errors.
 for (let i = 0; i < 60 * 60; i++) {
@@ -79,6 +81,45 @@ for (let i = 0; i < 600; i++) wm2.update(ctx.CFG.TICK);
 assert.strictEqual(new ctx.World({ difficulty: 'peaceful', seed: 1, settings: { rivals: 3, size: 'small' } }).colonies.length, 1, 'peaceful');
 console.log('map settings OK');
 
+// Winter arrives on time: spiders leave, ants slow down, nothing grows.
+const ww = new ctx.World({ difficulty: 'normal', seed: 9 });
+const winterAt = 3 * ctx.CFG.SEASON_DAYS * ctx.CFG.DAY_LENGTH;
+ww.time = winterAt - 1;
+ww.rain = 0;
+ww.nextRain = 999;
+ww.spawnSpider();
+for (let i = 0; i < 120; i++) ww.update(ctx.CFG.TICK);
+assert.strictEqual(ww.season.id, 'winter', 'winter comes');
+assert.ok(ww.events.some((e) => e.text.startsWith('Winter!')), 'winter is announced');
+assert.ok(ww.spiders.every((s) => s.state === 'leave'), 'spiders leave in winter');
+assert.ok(Math.abs(ww.speedMul - 0.6) < 1e-9, 'ants slow down in winter');
+const seeds = ww.foods.filter((f) => f.kind === 'seeds').reduce((n, f) => n + f.amount, 0);
+for (let i = 0; i < 600; i++) ww.update(ctx.CFG.TICK);
+assert.ok(ww.foods.filter((f) => f.kind === 'seeds').reduce((n, f) => n + f.amount, 0) < seeds, 'seeds rot in winter');
+console.log('seasons OK');
+
+// Full stores: foragers pile the surplus by the entrance, leave it alone while full, carry it in once there is room.
+const wf = new ctx.World({ difficulty: 'peaceful', seed: 4 });
+const pf = wf.player;
+for (let i = 0; i < 60 * 30; i++) wf.update(ctx.CFG.TICK);
+pf.food = pf.caps.food;
+const got0 = pf.stats.collected;
+for (let i = 0; i < 60 * 60; i++) {
+  pf.food = pf.caps.food; // keep the stores full (only what the colony eats meanwhile fits in)
+  wf.update(ctx.CFG.TICK);
+}
+const pile = wf.foods.find((f) => f.kind === 'surplus');
+assert.ok(pile && pile.owner === pf.id && pile.amount > 5, 'surplus piles up by the entrance');
+assert.ok(Math.hypot(pile.x - pf.x, pile.y - pf.y) < 30, 'surplus pile at the entrance');
+assert.ok(pf.stats.collected - got0 < pile.amount, 'food that did not fit is not counted as gathered');
+const saved = ctx.loadWorld(JSON.parse(JSON.stringify(ctx.serializeWorld(wf))));
+assert.strictEqual(saved.foods.find((f) => f.kind === 'surplus').owner, pf.id, 'surplus pile owner is saved');
+const before = pile.amount;
+pf.food = 0;
+for (let i = 0; i < 60 * 20; i++) wf.update(ctx.CFG.TICK);
+assert.ok(!wf.foods.includes(pile) || pile.amount < before - 5, 'surplus is carried in once there is room');
+console.log('surplus OK');
+
 // Version-1 saves (before the maps grew) carry no sizes or map settings: they must load as a 1600x1000
 // meadow with a 1000x640 nest, one rival and the colonies in their old spots.
 const legacy = new ctx.World({ difficulty: 'normal', seed: 7, W: 1600, H: 1000 });
@@ -87,6 +128,7 @@ const old = JSON.parse(JSON.stringify(ctx.serializeWorld(legacy)));
 delete old.W;
 delete old.H;
 delete old.settings;
+delete old.seasonT0;
 for (const c of old.colonies) {
   delete c.x;
   delete c.y;
@@ -103,5 +145,7 @@ assert.strictEqual(Math.round(w3.player.x), 300, 'legacy nest position');
 assert.strictEqual(Math.round(w3.rival.x), 1300, 'legacy rival position');
 assert.strictEqual(w3.rivals.length, 1, 'legacy saves have one rival');
 assert.strictEqual(w3.settings.size, 'small', 'legacy map counts as small');
+assert.strictEqual(w3.seasonT0, Math.floor(legacy.time / ctx.CFG.DAY_LENGTH) * ctx.CFG.DAY_LENGTH, 'legacy seasons start on load');
+assert.strictEqual(w3.season.id, 'spring', 'legacy saves start in spring');
 for (let i = 0; i < 600; i++) w3.update(ctx.CFG.TICK);
 console.log('legacy save OK');

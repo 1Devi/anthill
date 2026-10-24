@@ -43,6 +43,21 @@ const CFG = {
   TICK: 1 / 60,
   DAY_LENGTH: 150, // seconds per in-game day
 
+  // The year starts in spring; each season lasts SEASON_DAYS days. Fields left out default to 1 / off:
+  // regrow (how fast natural food appears), bloom (piles that sprout at once per 1600x1000), rot (share of
+  // each natural pile lost per second), speed and upkeep (all ants), lay (the queen's laying speed),
+  // cold (ants far from their nest freeze) and calm (no spiders, no raids).
+  SEASON_DAYS: 2,
+  SEASONS: [
+    { id: 'spring', name: 'Spring', regrow: 1.3, bloom: 2, news: 'Spring has come: the meadow grows food again.' },
+    { id: 'summer', name: 'Summer', news: 'Summer: food is plentiful.' },
+    { id: 'autumn', name: 'Autumn', regrow: 0.55, news: 'Autumn: food grows slowly now. Stock up before winter.' },
+    { id: 'winter', name: 'Winter', regrow: 0, rot: 0.008, speed: 0.6, upkeep: 0.6, lay: 0.4, cold: true, calm: true,
+      news: 'Winter! Nothing grows, ants are slow and the cold hurts them far from the nest. Spiders and raiders stay away.' },
+  ],
+  COLD: { range: 240, dmg: 0.12 }, // in winter, ants farther than range from their nest lose dmg HP per second
+  WINTER_STOCK: 0.8, // eggs leave food for the winter alone, up to this share of the storage capacity
+
   PHERO_EVAP_EVERY: 12, // evaporate every N ticks
   PHERO: {
     home: { halfLife: 40, tau: 22 },

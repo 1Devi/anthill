@@ -7,6 +7,7 @@ class Minimap {
     this.canvas = document.getElementById('minimap');
     this.ctx = this.canvas.getContext('2d');
     this.base = document.createElement('canvas');
+    this.rocks = document.createElement('canvas'); // rocks alone, laid over the snow in winter
     this.visible = true;
     this.frame = 0;
     this.wallsVersion = -1;
@@ -34,8 +35,8 @@ class Minimap {
     const cssH = Math.round((cssW * w.H) / w.W);
     this.canvas.style.height = cssH + 'px';
     const dpr = this.g.dpr;
-    this.canvas.width = this.base.width = Math.round(cssW * dpr);
-    this.canvas.height = this.base.height = Math.round(cssH * dpr);
+    this.canvas.width = this.base.width = this.rocks.width = Math.round(cssW * dpr);
+    this.canvas.height = this.base.height = this.rocks.height = Math.round(cssH * dpr);
     this.wallsVersion = -1;
   }
 
@@ -56,6 +57,13 @@ class Minimap {
     b.drawImage(s.walls, 0, 0, this.base.width, this.base.height);
     b.fillStyle = 'rgba(10,6,3,0.25)';
     b.fillRect(0, 0, this.base.width, this.base.height);
+    const r = this.rocks.getContext('2d');
+    r.globalCompositeOperation = 'source-over';
+    r.clearRect(0, 0, this.rocks.width, this.rocks.height);
+    r.drawImage(s.walls, 0, 0, this.rocks.width, this.rocks.height);
+    r.globalCompositeOperation = 'source-atop';
+    r.fillStyle = 'rgba(10,6,3,0.25)';
+    r.fillRect(0, 0, this.rocks.width, this.rocks.height);
     this.wallsVersion = this.world.wallsVersion;
   }
 
@@ -65,6 +73,16 @@ class Minimap {
     if (this.wallsVersion !== w.wallsVersion) this.drawBase();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(this.base, 0, 0);
+    const look = seasonLook(w), [tr, tg, tb, ta] = look.tint;
+    if (look.snow > 0.01) {
+      ctx.fillStyle = `rgba(236,242,255,${look.snow * 0.5})`;
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      ctx.drawImage(this.rocks, 0, 0);
+    }
+    if (ta > 0.005) {
+      ctx.fillStyle = `rgba(${tr | 0},${tg | 0},${tb | 0},${ta * 1.5})`;
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
     ctx.setTransform(k, 0, 0, k, 0, 0);
 
     for (const f of w.foods) {

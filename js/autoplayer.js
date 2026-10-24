@@ -1,6 +1,7 @@
 'use strict';
 // A scripted player for balance runs (balance.html, tests/sim-test.js): digs whatever the colony
-// is short of, researches in a fixed order and raises soldiers during raids. Not used in normal play.
+// is short of (a second granary before winter), researches in a fixed order and raises soldiers during
+// raids. Not used in normal play.
 
 const AUTO_RESEARCH = [
   'antennae', 'mandibles', 'loads', 'chitin', 'fertility', 'longevity', 'fungus', 'deep', 'digging', 'drill',
@@ -41,6 +42,8 @@ class AutoPlayer {
     if (c.ants.length + c.brood.length >= caps.pop - 4) return 'barracks';
     if (c.brood.length >= caps.brood - 1) return 'nursery';
     if (c.food > caps.food * 0.8) return 'storage';
+    // Stock up for the winter: a second granary in autumn.
+    if (this.w.seasonInfo().next.cold && count('storage') < 2) return 'storage';
     // Extras only once the colony has some size.
     const size = c.ants.length;
     if (this.research && !count('hall') && size >= 30) return 'hall';

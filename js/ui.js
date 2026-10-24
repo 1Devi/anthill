@@ -191,6 +191,7 @@ class UI {
     this.bindTip(this.$('r-soldiers'), () => this.tipSoldiers());
     this.bindTip(this.$('r-brood'), () => this.tipBrood());
     this.bindTip(this.$('r-queen'), () => this.tipQueen());
+    this.bindTip(document.querySelector('#topbar .clock'), () => this.tipSeason());
 
     this.$('btn-research').onclick = () => this.toggleResearch(true);
     this.$('btn-chronicle').onclick = () => this.toggleChronicle(true);
@@ -302,23 +303,27 @@ class UI {
   }
 
   tipFood() {
-    const p = this.g.world.player, f = p.flows(), n = p.counts;
-    const per = (k) => (k * 60).toFixed(1);
+    const w = this.g.world, p = w.player, f = p.flows(), n = p.counts, eat = w.season.upkeep;
+    const per = (k) => (k * 60 * eat).toFixed(1);
     return this.tipRows('Food', [
       ['Stored', `${Math.floor(p.food)} / ${p.caps.food}`],
       ['Brought in', `${signed(f.gathered, '+')} /min`, 'up'],
       ['Grown in gardens', `${signed(f.farmed, '+')} /min`, 'up'],
+      ...(f.surplus > 0.05 ? [['Left by the entrance (full)', `${fmtRate(f.surplus)} /min`]] : []),
       ['Eaten', `${signed(f.upkeep, '−')} /min`, 'down'],
       ['&nbsp;&nbsp;workers', `${per(n.workers * CFG.CASTE.worker.upkeep)}`],
       ['&nbsp;&nbsp;soldiers', `${per(n.soldiers * CFG.CASTE.soldier.upkeep)}`],
       ['&nbsp;&nbsp;larvae', `${per(n.larvae * CFG.BROOD.larvaUpkeep)}`],
       ['&nbsp;&nbsp;queen', p.alive ? per(CFG.QUEEN.upkeep) : '0'],
+      ...(eat !== 1 ? [[`&nbsp;&nbsp;${w.season.name.toLowerCase()}`, `${Math.round((1 - eat) * 100)}% less`]] : []),
       ['Spent on eggs', `${signed(f.eggs, '−')} /min`, 'down'],
       ['Spent on digging', `${signed(f.digging, '−')} /min`, 'down'],
       ['Spent on research', `${signed(f.research, '−')} /min`, 'down'],
       ['Net', `${signed(f.net, f.net >= 0 ? '+' : '−')} /min`, 'total'],
       ['Set aside for building', Math.floor(p.buildFund)],
-    ], `Averaged over the last minute; eating is the current rate. While digging or research runs, ${Math.round(p.buildShare * 100)}% of income is set aside for it.`);
+      ...(p.winterStock() >= 1 ? [['Kept for the winter', Math.floor(p.winterStock())]] : []),
+    ], `Averaged over the last minute; eating is the current rate. While digging or research runs, ${Math.round(p.buildShare * 100)}% of income is set aside for it.` +
+      (p.winterStock() >= 1 ? ' Eggs leave the winter stock alone.' : ''));
   }
 
   tipPop() {
@@ -341,6 +346,25 @@ class UI {
       ['&nbsp;&nbsp;nursing', p.nurses],
       ['Forager share', Math.round(p.foragerRatio * 100) + '%'],
     ], 'Change the share with the Foragers slider.');
+  }
+
+  // What the current season does, from its settings in CFG.SEASONS.
+  tipSeason() {
+    const w = this.g.world, s = w.seasonInfo(), d = s.def, pct = (v) => `${Math.round(Math.abs(1 - v) * 100)}%`;
+    const fx = [];
+    if (d.bloom) fx.push('Fresh food sprouts across the meadow as it begins.');
+    if (d.regrow === 0) fx.push('Nothing grows, and seeds and berries on the meadow slowly rot.');
+    else if (d.regrow > 1) fx.push(`Food grows ${pct(d.regrow)} faster.`);
+    else if (d.regrow < 1) fx.push(`Food grows ${pct(d.regrow)} slower.`);
+    if (d.speed < 1) fx.push(`Ants move ${pct(d.speed)} slower and eat ${pct(d.upkeep)} less.`);
+    if (d.lay < 1) fx.push(`The queen lays ${pct(d.lay)} slower.`);
+    if (d.cold) fx.push(`Ants more than ${CFG.COLD.range} steps from the nest freeze.`);
+    if (d.calm) fx.push('No spiders and no raids.');
+    if (!fx.length) fx.push('Plenty of food, nothing special.');
+    return this.tipRows(`${d.name}, year ${s.year}`, [
+      ['Day', `${w.dayInfo().day}`],
+      [`${s.next.name} in`, fmtTime(s.left)],
+    ], fx.join('<br>'));
   }
 
   tipSoldiers() {
@@ -615,7 +639,10 @@ class UI {
     const w = this.g.world, p = w.player, n = p.counts, caps = p.caps, f = p.flows();
     const day = w.dayInfo();
     this.$('clock').textContent = `Day ${day.day} · ${String(day.hour).padStart(2, '0')}:${String(day.minute).padStart(2, '0')}`;
-    this.$('weather').textContent = w.rain > 0 ? 'Rain' : day.night > 0.5 ? 'Night' : '';
+    this.$('weather').textContent = w.rain > 0 ? (w.season.cold ? 'Snow' : 'Rain') : day.night > 0.5 ? 'Night' : '';
+    const season = this.$('season');
+    season.textContent = w.season.name;
+    season.className = w.season.id;
 
     // One number: everything brought in minus everything eaten or spent, per minute.
     const net = f.net;
@@ -699,7 +726,8 @@ class UI {
         `<div class="role">${o.task}</div>${this.bar(o.hp / o.maxHp, 'red')}` +
         this.kv([['Health', `${Math.ceil(o.hp)} / ${Math.round(o.maxHp)}`], ['Ants eaten', o.eaten], ['Slowed by ants', Math.round(o.slow * 100) + '%']]);
     } else if (sel.type === 'food') {
-      el.innerHTML = `<div class="name">${o.name}</div><div class="role">Food source</div>${this.bar(o.amount / o.max, 'amber')}` +
+      const role = o.kind === 'surplus' ? 'Left by the entrance: the stores were full' : 'Food source';
+      el.innerHTML = `<div class="name">${o.name}</div><div class="role">${role}</div>${this.bar(o.amount / o.max, 'amber')}` +
         this.kv([['Food left', `${Math.max(0, Math.floor(o.amount))} / ${Math.round(o.max)}`]]);
     } else if (sel.type === 'colony') {
       const n = o.counts;
@@ -719,7 +747,7 @@ class UI {
     // The panel has room for five rows, so the rivals go in the subtitle.
     const left = w.rivals.filter((r) => r.alive).length;
     const sub = w.rivals.length ? `${left} of ${w.rivals.length} rival${w.rivals.length > 1 ? 's' : ''} left` : 'click something to inspect it';
-    return `<div class="name">Your colony</div><div class="role">Day ${w.dayInfo().day} · ${w.diff.name} · ${sub}</div>` +
+    return `<div class="name">Your colony</div><div class="role">Day ${w.dayInfo().day}, ${w.season.name.toLowerCase()} · ${w.diff.name} · ${sub}</div>` +
       this.kv([
         ['Workers', `${n.foragers} foraging · ${n.inside} in the nest`],
         ['Soldiers', `${n.soldiers}${p.rally ? (p.rally.raid ? ' · raiding' : ' · at rally point') : ' · guarding'}`],
