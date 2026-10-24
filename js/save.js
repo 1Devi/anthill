@@ -99,6 +99,8 @@ function serializeWorld(w) {
     time: r2(w.time),
     tick: w.tick,
     walls: packBytes(w.walls),
+    objects: w.objects.map((o) => [o.type, r2(o.x), r2(o.y), r2(o.a), o.size, o.seed]),
+    wet: r2(w.wet),
     foods: w.foods.map((f) => (f.owner === null ? [r2(f.x), r2(f.y), r2(f.amount), r2(f.max), f.kind] : [r2(f.x), r2(f.y), r2(f.amount), r2(f.max), f.kind, f.owner])),
     spiders: w.spiders.filter((s) => !s.dead && !s.gone).map((s) => [
       r2(s.x), r2(s.y), r2(s.a), r2(s.hp), s.power, r2(s.t), r2(s.life), s.state === 'leave' ? 1 : 0, s.eaten,
@@ -175,6 +177,8 @@ function loadWorld(data) {
   w.tick = data.tick;
   w.walls = unpackBytes(data.walls, w.walls.length);
   w.wallsVersion++;
+  // Saves from before the meadow objects have none.
+  w.objects = (data.objects || []).map(([type, x, y, a, size, seed]) => ({ type, x, y, a, size, seed }));
   w.foods = data.foods.map(([x, y, amount, max, kind, owner]) => {
     const f = new FoodSource(x, y, max, kind);
     f.amount = amount;
@@ -199,6 +203,10 @@ function loadWorld(data) {
     w.chronicleEvery = data.chronicleEvery || CFG.CHRONICLE.every;
   }
   data.colonies.forEach((cd, i) => loadColony(w.colonies[i], cd, w));
+  // Puddles follow from how wet it is.
+  w.wet = data.wet || 0;
+  w.wetLevel = Math.round(w.wet * 100);
+  if (w.wetLevel) w.flood();
   data.colonies.forEach((cd, i) => {
     const r = cd.rally;
     w.colonies[i].rally = r ? { x: r.x, y: r.y, raid: r.raid, target: w.colonies.find((o) => o.id === r.target) || null } : null;

@@ -73,12 +73,12 @@ class Colony {
     return this.nest ? this.nest.caps : this.aiCaps;
   }
 
-  // Steps (grid cells) from every free cell to the nest around the rocks, for soldiers heading home.
-  // Rebuilt when rocks change, at most once a second.
+  // Steps (grid cells) from every free cell to the nest around rocks, objects and puddles, for soldiers
+  // heading home. Rebuilt when those change, at most once a second.
   homeField() {
-    const w = this.w;
-    if (this.field && (this.fieldWalls === w.wallsVersion || w.time - this.fieldT < 1)) return this.field;
-    const gw = w.gw, gh = w.gh, n = gw * gh, walls = w.walls;
+    const w = this.w, key = w.wallsVersion * 1e6 + w.waterVersion;
+    if (this.field && (this.fieldKey === key || w.time - this.fieldT < 1)) return this.field;
+    const gw = w.gw, gh = w.gh, n = gw * gh, walls = w.walls, water = w.water;
     const f = this.field && this.field.length === n ? this.field : new Uint16Array(n);
     f.fill(65535);
     const q = new Int32Array(n);
@@ -93,14 +93,14 @@ class Colony {
         if (y < 0 || y >= gh) continue;
         for (let dx = -1; dx <= 1; dx++) {
           const x = cx + dx, j = y * gw + x;
-          if (x < 0 || x >= gw || f[j] <= d || walls[j]) continue;
+          if (x < 0 || x >= gw || f[j] <= d || walls[j] || water[j]) continue;
           f[j] = d;
           q[tail++] = j;
         }
       }
     }
     this.field = f;
-    this.fieldWalls = w.wallsVersion;
+    this.fieldKey = key;
     this.fieldT = w.time;
     return f;
   }

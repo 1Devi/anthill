@@ -125,6 +125,17 @@ The **Colony orders** panel at the bottom sets how the colony behaves:
   clash when paths cross, and now and then one rival raids another instead of you — a good moment
   to strike the weakened one.
 - **Night** falls every couple of minutes; **rain** washes away the scent trails (in winter it snows).
+- **Puddles** gather in the low spots of the meadow while it rains, and after the spring thaw. Ants
+  can't cross them, and food under water is out of reach until it dries up — usually within a minute.
+
+## The meadow
+
+Besides rocks, the meadow is strewn with **fallen twigs, pine cones and mushrooms** — ants walk around
+them like rocks (the Rocks setting changes how many there are), and the rock tools leave them alone.
+Leaves and flowers are just scenery; flowers bloom in spring and summer.
+
+Now and then something big turns up among the seeds and berries: a **fallen fruit** (summer and
+autumn) or a **dead beetle** — far more food than an ordinary pile. Whoever gets there first feasts.
 
 ## Seasons
 

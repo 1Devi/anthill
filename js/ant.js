@@ -319,11 +319,13 @@ class Ant {
       this.a = -this.a;
       ny = clamp(ny, 3, w.H - 3);
     }
-    if (w.isWall(nx, ny)) {
+    // An ant caught by a rising puddle may wade out of it.
+    const wading = w.wetLevel > 0 && w.isWet(this.x, this.y);
+    if (w.isWall(nx, ny, wading)) {
       const s = this.id & 1 ? 1 : -1;
       for (const k of [0.6, -0.6, 1.2, -1.2, 2.0, -2.0, Math.PI]) {
         const na = this.a + k * s;
-        if (!w.isWall(this.x + Math.cos(na) * sp * dt * 2, this.y + Math.sin(na) * sp * dt * 2)) {
+        if (!w.isWall(this.x + Math.cos(na) * sp * dt * 2, this.y + Math.sin(na) * sp * dt * 2, wading)) {
           this.a = na;
           return;
         }

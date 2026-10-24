@@ -3,6 +3,7 @@
 
 const WS = 1.5; // pixels per world unit for the baked terrain / rock layers
 const SNOW_Q = 3; // world units per pixel of the snow cover
+const OS = 4; // pixels per world unit for cached object sprites
 const SNOW_LEVELS = 4; // snow cover is drawn from this many depths, from a few drifts to a full blanket
 const FS = 4; // pixels per world unit for cached food piles
 
@@ -49,6 +50,8 @@ class SurfaceRenderer {
     this.drops = [];
     this.flakes = [];
     this.leaves = [];
+    this.ripples = [];
+    this.objCache = new Map();
   }
 
   build(w) {
@@ -74,6 +77,287 @@ class SurfaceRenderer {
     this.mounds = new Map(w.colonies.map((c) => [c, this.makeMound(c)]));
     this.snowField = null; // made the first time snow falls
     this.snowLevels = [];
+    this.objCache.clear();
+    this.water = document.createElement('canvas');
+    this.water.width = w.gw * 2;
+    this.water.height = w.gh * 2;
+    this.waterVersion = -1;
+    this.waterLevel = -1;
+    this.wetCells = [];
+    this.ripples.length = 0;
+  }
+
+  // ---------- meadow objects ----------
+
+  drawLeaf(ctx, o) {
+    const rng = mulberry32(o.seed), r = o.size, autumn = rng() < 0.35;
+    ctx.save();
+    ctx.translate(o.x, o.y);
+    ctx.rotate(o.a);
+    const leaf = () => {
+      ctx.beginPath();
+      ctx.moveTo(-r, 0);
+      ctx.bezierCurveTo(-r * 0.4, -r * 0.62, r * 0.5, -r * 0.5, r, 0);
+      ctx.bezierCurveTo(r * 0.5, r * 0.5, -r * 0.4, r * 0.62, -r, 0);
+    };
+    ctx.translate(0.8, 1.2);
+    leaf();
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fill();
+    ctx.translate(-0.8, -1.2);
+    leaf();
+    ctx.fillStyle = autumn ? `hsl(${30 + rng() * 20},${45 + rng() * 15}%,${32 + rng() * 10}%)` : `hsl(${85 + rng() * 35},${30 + rng() * 20}%,${26 + rng() * 10}%)`;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,240,200,0.28)';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(-r * 1.15, 0);
+    ctx.lineTo(r * 0.92, 0);
+    for (let k = -3; k <= 3; k++) {
+      if (!k) continue;
+      const x = (k / 4) * r * 0.8;
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + r * 0.22, Math.sign(k) * r * 0.32 * (1 - Math.abs(k) / 5));
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + r * 0.22, -Math.sign(k) * r * 0.32 * (1 - Math.abs(k) / 5));
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Twigs, pine cones, mushrooms and flowers, each drawn once into its own small canvas.
+  objectSprite(o) {
+    let e = this.objCache.get(o);
+    if (e) return e;
+    const R = o.type === 'twig' ? o.size / 2 + 22 : o.size * 1.6 + 4, size = Math.ceil(R * 2 * OS);
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.setTransform(OS, 0, 0, OS, R * OS, R * OS);
+    const rng = mulberry32(o.seed);
+    if (o.type === 'twig') this.drawTwig(ctx, o, rng);
+    else if (o.type === 'cone') this.drawCone(ctx, o, rng);
+    else if (o.type === 'mushrooms') this.drawMushrooms(ctx, o, rng);
+    else this.drawFlower(ctx, o, rng);
+    e = { canvas: c, R };
+    this.objCache.set(o, e);
+    return e;
+  }
+
+  drawTwig(ctx, o, rng) {
+    const L = o.size, Wd = CFG.OBJECTS.twig.width;
+    ctx.rotate(o.a);
+    const pts = [];
+    for (let d = -L / 2; d <= L / 2 + 0.1; d += L / 8) pts.push([d, (rng() - 0.5) * 2.4]);
+    const stroke = (w, color, dx = 0, dy = 0, list = pts) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      list.forEach(([x, y], i) => (i ? ctx.lineTo(x + dx, y + dy) : ctx.moveTo(x + dx, y + dy)));
+      ctx.stroke();
+    };
+    ctx.lineCap = ctx.lineJoin = 'round';
+    // Side shoots first, so the main stick lies over their bases.
+    const shoots = [];
+    for (let k = 0; k < 2 + Math.floor(rng() * 2); k++) {
+      const at = (rng() - 0.5) * L * 0.7, side = rng() < 0.5 ? -1 : 1, len = 12 + rng() * 22, a = side * (0.5 + rng() * 0.5);
+      shoots.push([[at, 0], [at + Math.cos(a) * len * 0.5, Math.sin(a) * len * 0.5], [at + Math.cos(a) * len, Math.sin(a) * len + side * 2]]);
+    }
+    for (const sh of shoots) stroke(Wd * 0.45 + 1, 'rgba(0,0,0,0.25)', 1.2, 1.8, sh);
+    stroke(Wd + 1.5, 'rgba(0,0,0,0.3)', 1.6, 2.4);
+    for (const sh of shoots) stroke(Wd * 0.45, '#5e4129', 0, 0, sh);
+    stroke(Wd, '#5a3e27');
+    stroke(Wd * 0.55, '#77553a', 0, -Wd * 0.12);
+    stroke(Wd * 0.18, 'rgba(255,225,180,0.35)', 0, -Wd * 0.28);
+    // Bark grooves and knots.
+    ctx.strokeStyle = 'rgba(30,18,8,0.45)';
+    ctx.lineWidth = 0.6;
+    for (let k = 0; k < L / 6; k++) {
+      const x = (rng() - 0.5) * L * 0.95, y = (rng() - 0.5) * Wd * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 3 + rng() * 5, y + (rng() - 0.5) * 0.6);
+      ctx.stroke();
+    }
+    for (let k = 0; k < 2; k++) {
+      ctx.fillStyle = '#3e2a19';
+      ctx.beginPath();
+      ctx.ellipse((rng() - 0.5) * L * 0.8, (rng() - 0.5) * Wd * 0.3, 1.6, 1.1, 0, 0, TAU);
+      ctx.fill();
+    }
+    // A pale broken end.
+    ctx.fillStyle = '#c9a477';
+    ctx.beginPath();
+    ctx.ellipse(pts[pts.length - 1][0], pts[pts.length - 1][1], 1.2, Wd * 0.45, 0, 0, TAU);
+    ctx.fill();
+  }
+
+  drawCone(ctx, o, rng) {
+    const r = o.size;
+    ctx.rotate(o.a);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(1.5, 2, r * 1.35, r * 0.95, 0, 0, TAU);
+    ctx.fill();
+    const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 1, 0, 0, r * 1.4);
+    g.addColorStop(0, '#8a5f39');
+    g.addColorStop(1, '#4a3020');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 1.3, r * 0.92, 0, 0, TAU);
+    ctx.fill();
+    // Rows of woody scales, smaller towards the tip.
+    for (let row = 0; row < 6; row++) {
+      const x = -r * 1.05 + row * r * 0.42, w = r * (0.95 - Math.abs(row - 2) * 0.12);
+      for (let k = -2; k <= 2; k++) {
+        const y = k * w * 0.36 + (row % 2) * w * 0.18;
+        if (Math.abs(y) > w * 0.8) continue;
+        ctx.fillStyle = `rgb(${(110 + rng() * 30) | 0},${(72 + rng() * 20) | 0},${(42 + rng() * 14) | 0})`;
+        ctx.beginPath();
+        ctx.ellipse(x, y, r * 0.24, r * 0.17, 0, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(30,18,8,0.55)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.arc(x - r * 0.05, y, r * 0.2, -1.2, 1.2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  drawMushrooms(ctx, o, rng) {
+    const r = o.size, red = rng() < 0.3, caps = [];
+    for (let k = 0; k < 3 + Math.floor(rng() * 3); k++) {
+      const a = rng() * TAU, d = rng() * r * 0.55;
+      caps.push([Math.cos(a) * d, Math.sin(a) * d, r * (0.32 + rng() * 0.25)]);
+    }
+    caps.sort((p, q) => p[2] - q[2]);
+    for (const [x, y, cr] of caps) {
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.arc(x + 1.2, y + 1.8, cr, 0, TAU);
+      ctx.fill();
+    }
+    for (const [x, y, cr] of caps) {
+      const g = ctx.createRadialGradient(x - cr * 0.35, y - cr * 0.35, cr * 0.1, x, y, cr);
+      if (red) {
+        g.addColorStop(0, '#e2553a');
+        g.addColorStop(1, '#9c2416');
+      } else {
+        g.addColorStop(0, '#d6b48a');
+        g.addColorStop(0.7, '#a77c50');
+        g.addColorStop(1, '#7a5634');
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, cr, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = red ? 'rgba(255,230,210,0.45)' : 'rgba(250,235,210,0.55)';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.arc(x, y, cr * 0.92, 0, TAU);
+      ctx.stroke();
+      if (red) {
+        ctx.fillStyle = 'rgba(255,250,240,0.92)';
+        for (let k = 0; k < 4; k++) {
+          ctx.beginPath();
+          ctx.arc(x + (rng() - 0.5) * cr * 1.2, y + (rng() - 0.5) * cr * 1.2, 0.5 + rng() * cr * 0.12, 0, TAU);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  drawFlower(ctx, o, rng) {
+    const r = o.size, petals = 5 + Math.floor(rng() * 2);
+    const [petal, heart] = [['#f6f2e6', '#f2c53d'], ['#f4d24a', '#d9822b'], ['#e9a3c9', '#f4d24a'], ['#b9a3f0', '#f4e3a0']][Math.floor(rng() * 4)];
+    ctx.rotate(o.a);
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.arc(1, 1.5, r, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = petal;
+    for (let k = 0; k < petals; k++) {
+      const a = (k / petals) * TAU;
+      ctx.beginPath();
+      ctx.ellipse(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55, r * 0.5, r * 0.3, a, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = heart;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.3, 0, TAU);
+    ctx.fill();
+  }
+
+  // ---------- puddles ----------
+
+  // Puddles drawn from the smooth low-ground field at twice the grid resolution, so the shores are
+  // round: a muddy rim, light shallows, a deeper middle. Redrawn every few percent of wetness.
+  updateWater() {
+    const w = this.w, level = w.wetLevel ? Math.max(1, w.wetLevel - (w.wetLevel % 3)) : 0;
+    if (this.waterLevel === level && this.waterVersion === w.waterVersion) return;
+    if (this.waterLevel !== level || !level) {
+      const gw = w.gw, gh = w.gh, W2 = gw * 2, H2 = gh * 2;
+      if (this.water.width !== W2) {
+        this.water.width = W2;
+        this.water.height = H2;
+      }
+      const ctx = this.water.getContext('2d'), img = ctx.createImageData(W2, H2), d = img.data;
+      if (level && w.lowland) {
+        const low = w.lowland, walls = w.walls, th = w.floodAt[level];
+        for (let py = 0; py < H2; py++) {
+          const fy = clamp((py + 0.5) / 2 - 0.5, 0, gh - 1.001), cy = fy | 0, ty = fy - cy;
+          for (let px = 0; px < W2; px++) {
+            const fx = clamp((px + 0.5) / 2 - 0.5, 0, gw - 1.001), cx = fx | 0, tx = fx - cx, k = cy * gw + cx;
+            if (walls[((py >> 1) * gw) + (px >> 1)]) continue;
+            const v = lerp(lerp(low[k], low[k + 1], tx), lerp(low[k + gw], low[k + gw + 1], tx), ty) - th, o = (py * W2 + px) * 4;
+            // About one pixel of the field's slope: enough to antialias the shore.
+            if (v > -0.03) {
+              const t = clamp(v / 0.08, 0, 1), cover = clamp((v + 0.03) / 0.03, 0, 1);
+              d[o] = lerp(92, 38, t);
+              d[o + 1] = lerp(132, 78, t);
+              d[o + 2] = lerp(158, 118, t);
+              d[o + 3] = lerp(205, 240, t) * cover;
+            } else if (v > -0.07) {
+              d[o] = 50;
+              d[o + 1] = 36;
+              d[o + 2] = 24;
+              d[o + 3] = 110 * (1 - (-0.03 - v) / 0.04);
+            }
+          }
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      this.waterLevel = level;
+    }
+    this.waterVersion = w.waterVersion;
+    this.wetCells.length = 0;
+    for (let i = 0; i < w.water.length; i++) if (w.water[i]) this.wetCells.push(i);
+  }
+
+  drawPuddles(ctx, raining) {
+    const w = this.w;
+    this.updateWater();
+    if (!this.wetCells.length) {
+      this.ripples.length = 0;
+      return;
+    }
+    ctx.drawImage(this.water, 0, 0, w.W, w.H);
+    if (raining) {
+      for (let k = 0; k < 4 && this.ripples.length < 90; k++) {
+        const i = this.wetCells[(Math.random() * this.wetCells.length) | 0];
+        this.ripples.push({ x: ((i % w.gw) + Math.random()) * CFG.CELL, y: (((i / w.gw) | 0) + Math.random()) * CFG.CELL, t: 0 });
+      }
+    }
+    ctx.lineWidth = 0.6;
+    for (const r of this.ripples) {
+      r.t += 1 / 60;
+      ctx.strokeStyle = `rgba(210,230,245,${0.6 * (1 - r.t / 0.9)})`;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, 1 + r.t * 7, 0, TAU);
+      ctx.stroke();
+    }
+    this.ripples = this.ripples.filter((r) => r.t < 0.9);
   }
 
   // Snow cover at one depth (1..SNOW_LEVELS): drifts with crisp edges, a superset of the shallower ones.
@@ -104,6 +388,11 @@ class SurfaceRenderer {
     }
     ctx.putImageData(img, 0, 0);
     return (this.snowLevels[level] = c);
+  }
+
+  drawObject(ctx, o) {
+    const s = this.objectSprite(o);
+    ctx.drawImage(s.canvas, o.x - s.R, o.y - s.R, s.R * 2, s.R * 2);
   }
 
   // Deeper snow covers more ground; partial depths blend the two nearest levels.
@@ -228,6 +517,8 @@ class SurfaceRenderer {
       ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
       ctx.stroke();
     }
+    // Big fallen leaves lying on the meadow (scenery from the world's objects).
+    for (const o of w.objects) if (o.type === 'leaf') this.drawLeaf(ctx, o);
     return c;
   }
 
@@ -321,6 +612,7 @@ class SurfaceRenderer {
   }
 
   foodSprite(f) {
+    if (f.kind === 'fruit' || f.kind === 'beetle') return this.findSprite(f);
     const vis = f.visible;
     let e = this.foodCache.get(f.id);
     if (e && e.vis === vis && e.crumbs === f.crumbs) return e;
@@ -354,6 +646,96 @@ class SurfaceRenderer {
       ctx.restore();
     }
     e = { canvas: c, vis, crumbs: f.crumbs, R };
+    this.foodCache.set(f.id, e);
+    return e;
+  }
+
+  // A fallen fruit or a dead beetle, with bites taken out as ants carry it away.
+  findSprite(f) {
+    const vis = Math.ceil((10 * Math.max(0, f.amount)) / f.max);
+    let e = this.foodCache.get(f.id);
+    if (e && e.vis === vis) return e;
+    const r = f.r0 * 0.85, R = r + 8, size = Math.ceil(R * 2 * FS);
+    const c = e ? e.canvas : document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.setTransform(FS, 0, 0, FS, R * FS, R * FS);
+    const rng = mulberry32(f.id * 977);
+    ctx.rotate(rng() * TAU);
+    if (f.kind === 'fruit') {
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.arc(1.5, 2.2, r, 0, TAU);
+      ctx.fill();
+      const g = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
+      g.addColorStop(0, '#f08a4e');
+      g.addColorStop(0.6, '#c8352a');
+      g.addColorStop(1, '#7f1d18');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,240,220,0.45)';
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.4, -r * 0.4, r * 0.28, r * 0.16, -0.7, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = '#4a2d18';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.1);
+      ctx.lineTo(r * 0.15, -r * 0.45);
+      ctx.stroke();
+      ctx.fillStyle = '#5f8a35';
+      ctx.beginPath();
+      ctx.ellipse(r * 0.32, -r * 0.5, r * 0.22, r * 0.1, -0.5, 0, TAU);
+      ctx.fill();
+    } else {
+      const L = r * 1.1;
+      ctx.strokeStyle = '#1c1714';
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 1.1;
+      for (let k = -1; k <= 1; k++) {
+        for (const s of [-1, 1]) {
+          const a = s * (1.3 + k * 0.45 + (rng() - 0.5) * 0.4), x0 = k * L * 0.25;
+          ctx.beginPath();
+          ctx.moveTo(x0, 0);
+          ctx.lineTo(x0 + Math.cos(a) * L * 0.55, Math.sin(a) * L * 0.55);
+          ctx.lineTo(x0 + Math.cos(a + s * 0.6) * L * 0.85, Math.sin(a + s * 0.6) * L * 0.85);
+          ctx.stroke();
+        }
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(1.2, 1.8, L * 0.62, L * 0.42, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#231c18';
+      ctx.beginPath();
+      ctx.ellipse(L * 0.58, 0, L * 0.18, L * 0.16, 0, 0, TAU);
+      ctx.fill();
+      for (const s of [-1, 1]) {
+        const g = ctx.createLinearGradient(0, 0, 0, s * L * 0.4);
+        g.addColorStop(0, '#2e5f57');
+        g.addColorStop(1, '#173430');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(-L * 0.05, s * L * 0.19, L * 0.55, L * 0.2, 0, 0, TAU);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(180,255,235,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(-L * 0.15, -L * 0.24, L * 0.3, L * 0.06, 0, 0, TAU);
+      ctx.fill();
+    }
+    // Bites: one more for every tenth carried away.
+    ctx.globalCompositeOperation = 'destination-out';
+    for (let k = 0; k < 10 - vis; k++) {
+      const a = rng() * TAU, d = r * (0.75 + rng() * 0.3);
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * d, Math.sin(a) * d, r * (0.3 + rng() * 0.2), 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    e = { canvas: c, vis, R };
     this.foodCache.set(f.id, e);
     return e;
   }
@@ -422,10 +804,24 @@ class SurfaceRenderer {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.bg, 0, 0, w.W, w.H);
     const day = w.dayInfo(), look = seasonLook(w);
-    // Snow lies on the ground; rocks stay on top of it, so ants' obstacles remain visible, with a light frost.
+    // Flowers bloom in spring and summer.
+    const bloom = look.id === 'spring' ? look.k : look.id === 'summer' ? 1 : look.id === 'autumn' ? 1 - look.k : 0;
+    if (bloom > 0.01) {
+      ctx.globalAlpha = bloom;
+      for (const o of w.objects) if (o.type === 'flower' && inView(o.x, o.y)) this.drawObject(ctx, o);
+      ctx.globalAlpha = 1;
+    }
+    // Snow lies on the ground; rocks and objects stay on top of it, so ants' obstacles remain visible, with a light frost.
     if (look.snow > 0.01) this.drawSnow(ctx, look.snow);
     ctx.drawImage(this.walls, 0, 0, w.W, w.H);
+    const pad = CFG.OBJECTS.twig.len[1];
+    for (const o of w.objects) {
+      if (o.type === 'twig' || o.type === 'cone' || o.type === 'mushrooms') {
+        if (o.x > view.x0 - pad && o.x < view.x1 + pad && o.y > view.y0 - pad && o.y < view.y1 + pad) this.drawObject(ctx, o);
+      }
+    }
     if (look.snow > 0.01) this.drawSnow(ctx, look.snow, 0.12);
+    this.drawPuddles(ctx, w.rain > 0 && !look.falling);
     const [tr, tg, tb, ta] = look.tint;
     if (ta > 0.005) {
       ctx.fillStyle = `rgba(${tr | 0},${tg | 0},${tb | 0},${ta})`;

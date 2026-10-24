@@ -74,7 +74,10 @@ class PheroMap {
 
 // Seasons with their defaults filled in.
 const SEASONS = CFG.SEASONS.map((s) => ({ regrow: 1, bloom: 0, rot: 0, speed: 1, upkeep: 1, lay: 1, cold: false, calm: false, ...s }));
-const NATURAL_FOOD = new Set(['seeds', 'berries']);
+const NATURAL_FOOD = new Set(['seeds', 'berries', 'fruit', 'beetle']);
+// Wall grid values: empty ground, rock (the player can add and erase it) and objects (twigs, cones, mushrooms).
+const ROCK = 1, OBJECT = 2;
+const OBSTACLES = new Set(['twig', 'cone', 'mushrooms']);
 
 const FOOD_KINDS = {
   seeds: 'Seeds',
@@ -82,6 +85,8 @@ const FOOD_KINDS = {
   sugar: 'Sugar',
   corpse: 'Remains',
   prey: 'Spider carcass',
+  fruit: 'Fallen fruit',
+  beetle: 'Dead beetle',
   surplus: 'Surplus food', // left by the entrance while the colony's stores are full
 };
 
@@ -160,6 +165,12 @@ class World {
     this.seed = opts.seed ?? (Math.random() * 1e9) | 0;
     this.walls = new Uint8Array(this.gw * this.gh);
     this.wallsVersion = 0;
+    this.water = new Uint8Array(this.gw * this.gh); // puddle cells
+    this.waterVersion = 0;
+    this.wet = 0; // how much rain has gathered, 0..1
+    this.wetLevel = 0;
+    this.lowland = null; // how low each cell lies, for puddles
+    this.objects = []; // twigs, cones, mushrooms, leaves, flowers: { type, x, y, a, size, seed }
     this.wallDirty = []; // world-space rects the renderer must repaint
     this.foods = [];
     this.colonies = [];
@@ -232,9 +243,10 @@ class World {
         for (const n of nests) near = Math.min(near, dist(x, y, n.x, n.y));
         if (near < 110) continue;
         const v = noise.fbm(x * 0.0042, y * 0.0042, 4) - Math.max(0, (150 - near) / 400);
-        if (v > rock) this.walls[cy * this.gw + cx] = 1;
+        if (v > rock) this.walls[cy * this.gw + cx] = ROCK;
       }
     }
+    this.placeObjects(nests);
 
     this.player = new Colony(this, { id: 0, name: 'Your colony', adj: 'your', isPlayer: true, palette: 'player', x: P.x, y: P.y, ...this.diff.player });
     this.colonies.push(this.player);
@@ -249,6 +261,128 @@ class World {
     for (let i = 0; i < 3; i++) this.placeFoodNear(P.x, P.y, 120, 250, chance(0.7) ? 'seeds' : 'berries');
     for (const r of this.rivals) for (let i = 0; i < 2; i++) this.placeFoodNear(r.x, r.y, 120, 250, 'seeds');
     for (let i = 0; i < Math.round(5 * this.areaK * this.foodMul); i++) this.spawnNaturalFood();
+    this.makeLowland();
+  }
+
+  // Twigs, pine cones and mushrooms on free ground away from the nests (they block ants), plus leaves
+  // and flowers as scenery.
+  placeObjects(nests) {
+    const O = CFG.OBJECTS, k = this.areaK, more = CFG.MAP.rocks[this.settings.rocks].objects;
+    const clear = (x, y, r) => this.spotFree(x, y, r) && nests.every((n) => dist(x, y, n.x, n.y) > 130 + r) &&
+      this.objects.every((o) => dist(x, y, o.x, o.y) > r + (o.type === 'twig' ? o.size / 2 : o.size) + 12);
+    const place = (type, count, size, fits) => {
+      for (let i = 0; i < Math.round(count); i++) {
+        for (let t = 0; t < 40; t++) {
+          const x = rand(40, this.W - 40), y = rand(40, this.H - 40), s = rand(size[0], size[1]), a = rand(0, TAU);
+          if (!fits(x, y, s, a)) continue;
+          this.objects.push({ type, x, y, a, size: Math.round(s), seed: randInt(1, 1e6) });
+          break;
+        }
+      }
+    };
+    // A twig needs free ground along its whole length.
+    const twigFits = (x, y, len, a) => {
+      for (let d = -len / 2; d <= len / 2; d += 10) if (!clear(x + Math.cos(a) * d, y + Math.sin(a) * d, 8)) return false;
+      return true;
+    };
+    place('twig', O.twig.count * k * more, O.twig.len, twigFits);
+    place('cone', O.cone.count * k * more, O.cone.r, (x, y, r) => clear(x, y, r + 4));
+    place('mushrooms', O.mushrooms.count * k * more, O.mushrooms.r, (x, y, r) => clear(x, y, r + 4));
+    for (const o of this.objects) this.blockObject(o);
+    place('leaf', O.leaf.count * k, O.leaf.r, (x, y, r) => clear(x, y, r));
+    place('flower', O.flower.count * k, O.flower.r, (x, y, r) => clear(x, y, r));
+  }
+
+  // Mark an obstacle's footprint in the wall grid.
+  blockObject(o) {
+    if (!OBSTACLES.has(o.type)) return;
+    const C = CFG.CELL, pad = o.type === 'twig' ? CFG.OBJECTS.twig.width / 2 + 1 : o.size * 0.85;
+    const ext = o.type === 'twig' ? o.size / 2 + pad : pad;
+    const x0 = Math.max(0, ((o.x - ext) / C) | 0), x1 = Math.min(this.gw - 1, ((o.x + ext) / C) | 0);
+    const y0 = Math.max(0, ((o.y - ext) / C) | 0), y1 = Math.min(this.gh - 1, ((o.y + ext) / C) | 0);
+    const ca = Math.cos(o.a), sa = Math.sin(o.a);
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        const dx = (cx + 0.5) * C - o.x, dy = (cy + 0.5) * C - o.y;
+        let d;
+        if (o.type === 'twig') {
+          const along = clamp(dx * ca + dy * sa, -o.size / 2, o.size / 2);
+          d = Math.hypot(dx - along * ca, dy - along * sa);
+        } else d = Math.hypot(dx, dy);
+        if (d <= pad && this.walls[cy * this.gw + cx] === 0) this.walls[cy * this.gw + cx] = OBJECT;
+      }
+    }
+  }
+
+  // ---------- puddles ----------
+
+  // How low each free cell lies (0..1) and the levels at which a given share of the meadow is flooded.
+  // Nest surroundings never flood.
+  makeLowland() {
+    const noise = makeNoise2D(this.seed ^ 0x9dd1), C = CFG.CELL, gw = this.gw, gh = this.gh, n = gw * gh;
+    const low = new Float32Array(n), hist = new Uint32Array(256);
+    // The ground rises and falls slowly: sample every other cell and blend in between.
+    const sx = Math.ceil(gw / 2) + 1, sy = Math.ceil(gh / 2) + 1, coarse = new Float32Array(sx * sy);
+    for (let j = 0; j < sy; j++) {
+      for (let i = 0; i < sx; i++) {
+        const x = i * 2 * C, y = j * 2 * C;
+        coarse[j * sx + i] = clamp((noise.fbm(x * 0.006, y * 0.006, 3) * 0.85 + noise(x * 0.05, y * 0.05) * 0.15 - 0.5) * 2.6 + 0.5, 0, 1);
+      }
+    }
+    for (let cy = 0; cy < gh; cy++) {
+      const j = cy >> 1, ty = (cy & 1) * 0.5;
+      for (let cx = 0; cx < gw; cx++) {
+        const i = cx >> 1, tx = (cx & 1) * 0.5, k = j * sx + i;
+        low[cy * gw + cx] = lerp(lerp(coarse[k], coarse[k + 1], tx), lerp(coarse[k + sx], coarse[k + sx + 1], tx), ty);
+      }
+    }
+    for (const c of this.colonies) {
+      const r = 90 / C, ccx = c.x / C, ccy = c.y / C;
+      for (let cy = Math.max(0, (ccy - r) | 0); cy <= Math.min(gh - 1, ccy + r); cy++) {
+        for (let cx = Math.max(0, (ccx - r) | 0); cx <= Math.min(gw - 1, ccx + r); cx++) {
+          if ((cx - ccx) ** 2 + (cy - ccy) ** 2 < r * r) low[cy * gw + cx] = 0;
+        }
+      }
+    }
+    let free = 0;
+    for (let i = 0; i < n; i++) {
+      if (low[i] <= 0) continue;
+      hist[Math.min(255, (low[i] * 256) | 0)]++;
+      free++;
+    }
+    this.lowland = low;
+    // level[k]: lowland value above which k% of cover is under water (k = 0..100).
+    this.floodAt = new Float32Array(101);
+    let acc = 0, bin = 256;
+    for (let k = 0; k <= 100; k++) {
+      const want = ((k / 100) * CFG.PUDDLES.cover * free) | 0;
+      while (bin > 0 && acc < want) acc += hist[--bin];
+      this.floodAt[k] = k === 0 ? 2 : bin / 256;
+    }
+  }
+
+  // Rain fills puddles and dry weather drains them; spring meltwater floods the lows for a while.
+  updatePuddles(dt) {
+    const P = CFG.PUDDLES, s = this.seasonInfo();
+    const thaw = !s.first && s.prev.cold && s.frac < 0.15 ? P.melt : 0;
+    const want = this.rain > 0 && !s.def.cold ? 1 : thaw;
+    this.wet = want > this.wet ? Math.min(want, this.wet + dt / P.fill) : Math.max(want, this.wet - dt / P.dry);
+    const level = Math.round(this.wet * 100);
+    if (level === this.wetLevel) return;
+    this.wetLevel = level;
+    this.flood();
+  }
+
+  flood() {
+    if (!this.lowland) this.makeLowland();
+    const th = this.floodAt[this.wetLevel], low = this.lowland, walls = this.walls, water = this.water;
+    for (let i = 0; i < water.length; i++) water[i] = walls[i] === 0 && low[i] > th ? 1 : 0;
+    this.waterVersion++;
+  }
+
+  isWet(x, y) {
+    if (!this.wetLevel || x < 0 || y < 0 || x >= this.W || y >= this.H) return false;
+    return this.water[((y / CFG.CELL) | 0) * this.gw + ((x / CFG.CELL) | 0)] === 1;
   }
 
   // Seconds until the next natural pile appears: the same rate per area on every map size.
@@ -279,8 +413,20 @@ class World {
       const x = rand(40, this.W - 40), y = rand(40, this.H - 40);
       if (this.colonies.some((c) => dist(x, y, c.x, c.y) < 140)) continue;
       if (this.spotFree(x, y, 14)) {
-        const amount = Math.round(randInt(CFG.FOOD_PILE[0], CFG.FOOD_PILE[1]) * this.foodMul);
-        return this.addFood(x, y, amount, chance(0.6) ? 'seeds' : 'berries', false);
+        // Now and then a big find: a fallen fruit or a dead beetle (not among the starting food).
+        let kind = chance(0.6) ? 'seeds' : 'berries', size = CFG.FOOD_PILE;
+        if (this.time > 0) {
+          let r = Math.random();
+          for (const [k, f] of Object.entries(CFG.FINDS)) {
+            if (f.seasons.includes(this.season.id) && (r -= f.chance) < 0) {
+              kind = k;
+              size = f.amount;
+              this.log(f.news, 'info');
+              break;
+            }
+          }
+        }
+        return this.addFood(x, y, Math.round(randInt(size[0], size[1]) * this.foodMul), kind, false);
       }
     }
     return null;
@@ -288,16 +434,19 @@ class World {
 
   // ---------- queries ----------
 
-  isWall(x, y) {
+  // Rocks, objects and puddles block ants; wading = an ant caught in a puddle may still walk out of it.
+  isWall(x, y, wading = false) {
     if (x < 0 || y < 0 || x >= this.W || y >= this.H) return true;
-    return this.walls[((y / CFG.CELL) | 0) * this.gw + ((x / CFG.CELL) | 0)] === 1;
+    const i = ((y / CFG.CELL) | 0) * this.gw + ((x / CFG.CELL) | 0);
+    return this.walls[i] !== 0 || (!wading && this.water[i] === 1);
   }
 
-  // Nearest food within r. A colony's ants leave its own surplus pile alone while its stores are full.
+  // Nearest food within r. A colony's ants leave its own surplus pile alone while its stores are full,
+  // and food under a puddle is out of reach until it dries.
   nearestFood(x, y, r, col) {
     let best = null, bd = Infinity;
     for (const f of this.foods) {
-      if (f.amount <= 0 || (col && f.owner === col.id && col.full)) continue;
+      if (f.amount <= 0 || (col && f.owner === col.id && col.full) || this.isWet(f.x, f.y)) continue;
       const lim = r + f.r0;
       const d = dist2(x, y, f.x, f.y);
       if (d < lim * lim && d < bd) {
@@ -405,9 +554,11 @@ class World {
         const px = (cx + 0.5) * C, py = (cy + 0.5) * C;
         if (dist2(px, py, x, y) > r * r) continue;
         if (val && this.colonies.some((c) => dist(px, py, c.x, c.y) < CFG.NEST_R + 22)) continue;
+        // The rock tools only add and remove rock: objects stay put.
         const i = cy * this.gw + cx;
-        if (this.walls[i] !== val) {
+        if (val ? this.walls[i] === 0 : this.walls[i] === ROCK) {
           this.walls[i] = val;
+          this.water[i] = 0;
           changed = true;
         }
       }
@@ -555,6 +706,7 @@ class World {
       this.rotT = 0;
     }
     if (season.cold) this.freeze(dt);
+    this.updatePuddles(dt);
 
     if (this.rain > 0) {
       this.rain -= dt;

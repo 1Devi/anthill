@@ -51,6 +51,21 @@ spring. `Colony.winterStock()` keeps food back from eggs through autumn and wint
 `CFG.WINTER_STOCK` of the storage. On screen, `seasonLook()` in `render-surface.js` gives the colour
 wash and snow depth shared by the meadow, the minimap and the nest view.
 
+## Meadow objects and puddles
+
+The wall grid holds a material per cell: 0 free, 1 rock (the player's rock tools only add and remove
+this), 2 an object. `World.placeObjects()` scatters `w.objects` (`{ type, x, y, a, size, seed }`):
+twigs, cones and mushrooms are stamped into the grid by `blockObject()`; leaves and flowers are only
+drawn. Objects are saved as a list (the grid already carries their footprint). Fallen fruit and dead
+beetles are natural food kinds (`CFG.FINDS`) picked now and then by `spawnNaturalFood()`.
+
+Puddles live in `w.water`. `makeLowland()` builds a smooth low-ground field (nests stay dry) and
+`floodAt[k]`, the level at which k% of `CFG.PUDDLES.cover` is under water. `w.wet` rises with rain
+and spring meltwater and falls in dry weather; `flood()` refills `w.water` whenever its whole percent
+changes. `isWall()` counts water, except for an ant already standing in it (`wading`), so ants walk
+out of a rising puddle; `nearestFood()` skips food under water. Saves keep only `wet`. The renderer
+draws puddles from the same smooth field, so shores look round while the grid stays coarse.
+
 ## Food and soldiers
 
 Food the stores can't hold doesn't vanish: `Colony.addFood()` stores what fits and `dropSurplus()`
@@ -94,8 +109,9 @@ node tests/save-test.js
 
 Checks that a save loads back identically, including research, map options (a large map with
 three rivals) and the season, that winter arrives on time (spiders leave, ants slow down, seeds rot),
-that food left over at full stores piles up by the entrance and is carried in later, and that
-old-format saves (smaller map, no sizes, map options or seasons stored) still load.
+that food left over at full stores piles up by the entrance and is carried in later, that meadow
+objects block ants and survive saves, that rain puddles block ants and dry up, and that old-format
+saves (smaller map, no sizes, map options or seasons stored) still load.
 
 ## Deploying
 

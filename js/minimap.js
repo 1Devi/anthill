@@ -83,10 +83,14 @@ class Minimap {
       ctx.fillStyle = `rgba(${tr | 0},${tg | 0},${tb | 0},${ta * 1.5})`;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
+    if (w.wetLevel) {
+      this.g.surface.updateWater();
+      ctx.drawImage(this.g.surface.water, 0, 0, this.canvas.width, this.canvas.height);
+    }
     ctx.setTransform(k, 0, 0, k, 0, 0);
 
     for (const f of w.foods) {
-      ctx.fillStyle = f.kind === 'corpse' ? 'rgba(160,120,90,0.8)' : f.kind === 'prey' ? '#d08a5a' : '#f0d66e';
+      ctx.fillStyle = { corpse: 'rgba(160,120,90,0.8)', prey: '#d08a5a', fruit: '#ff6b4a', beetle: '#8fe0d2' }[f.kind] || '#f0d66e';
       const r = Math.max(2.2 / k, f.pickR * 0.8);
       ctx.beginPath();
       ctx.arc(f.x, f.y, r, 0, TAU);

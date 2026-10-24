@@ -14,10 +14,10 @@ const CFG = {
       normal: { name: 'Normal', mul: 1 },
       rich: { name: 'Rich', mul: 1.6 },
     },
-    rocks: { // terrain noise above this becomes rock: ~5%, ~11% and ~18% of the meadow
-      few: { name: 'Few', threshold: 0.715 },
-      normal: { name: 'Normal', threshold: 0.665 },
-      many: { name: 'Many', threshold: 0.625 },
+    rocks: { // terrain noise above this becomes rock: ~5%, ~11% and ~18% of the meadow; objects scales twigs, cones, mushrooms
+      few: { name: 'Few', threshold: 0.715, objects: 0.6 },
+      normal: { name: 'Normal', threshold: 0.665, objects: 1 },
+      many: { name: 'Many', threshold: 0.625, objects: 1.4 },
     },
     maxRivals: 3,
     defaults: { size: 'medium', food: 'normal', rocks: 'normal', rivals: 1 },
@@ -39,6 +39,24 @@ const CFG = {
   NATURAL_FOOD: 14, // max natural food piles per 1600x1000 of meadow
   FOOD_PILE: [220, 420], // size range of natural food piles
   FOOD_REGROW: [45, 79], // seconds between new natural piles per 1600x1000 of meadow
+  // Rare big finds among the natural food: share of new piles, size, and the seasons they turn up in.
+  FINDS: {
+    fruit: { chance: 0.07, amount: [550, 800], seasons: ['summer', 'autumn'], news: 'A ripe fruit has fallen on the meadow.' },
+    beetle: { chance: 0.05, amount: [280, 420], seasons: ['spring', 'summer', 'autumn'], news: 'A dead beetle lies on the meadow — a feast for whoever finds it first.' },
+  },
+  // Meadow objects, per 1600x1000 (obstacles scaled by the Rocks option). Obstacles block ants like rocks;
+  // leaves and flowers are only scenery.
+  OBJECTS: {
+    twig: { count: 7, len: [70, 170], width: 7 },
+    cone: { count: 4, r: [8, 12] },
+    mushrooms: { count: 4, r: [9, 15] },
+    leaf: { count: 26, r: [9, 17] },
+    flower: { count: 24, r: [4, 7] },
+  },
+  // Rain fills puddles in the low spots of the meadow; ants can't cross them. wet goes 0..1: it rises over
+  // fill seconds of rain (and with spring meltwater) and falls over dry seconds; cover is the share of the
+  // meadow under water when fully wet.
+  PUDDLES: { fill: 25, dry: 45, cover: 0.035, melt: 0.6 },
   CELL: 5, // pheromone / wall grid cell size in world units
   TICK: 1 / 60,
   DAY_LENGTH: 150, // seconds per in-game day

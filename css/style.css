@@ -196,11 +196,13 @@ input[type="range"] { width: 100%; accent-color: var(--amber); margin: 4px 0 0; 
 .hud-orders .row .check { margin: 0 4px 0 0; }
 .hud-orders .row .btn { padding: 6px 8px; flex: 0 0 auto; }
 
-.hud-cmd { flex: 0 0 auto; min-width: 236px; }
+/* Fixed width (the wider nest grid fits), so the hint below can never stretch the panel. */
+.hud-cmd { flex: 0 0 300px; width: 300px; }
+.hud-cmd h3 { margin-bottom: 6px; }
 .cmd-grid { display: grid; grid-template-columns: repeat(3, 68px); gap: 6px; }
 .cmd-grid.wide { grid-template-columns: repeat(4, 64px); }
 .cmd {
-  position: relative; height: 54px;
+  position: relative; height: 50px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   background: linear-gradient(#3a2a1b, #261a10); border: 1px solid #4d3822; border-radius: 7px;
   box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.08), 0 2px 0 rgba(0, 0, 0, 0.5);
@@ -213,7 +215,11 @@ input[type="range"] { width: 100%; accent-color: var(--amber); margin: 4px 0 0; 
 .cmd .key { position: absolute; top: 3px; left: 5px; font: 700 9.5px ui-monospace, monospace; color: var(--dim); }
 .cmd .cost { position: absolute; top: 3px; right: 5px; font-size: 9.5px; color: var(--amber); font-weight: 700; }
 .cmd .cd { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--amber); border-radius: 0 0 0 6px; }
-.cmd-hint { margin: 7px 0 0; font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Always two lines tall, whatever the tool, so switching tools doesn't move anything. */
+.cmd-hint {
+  margin: 5px 0 0; font-size: 11px; line-height: 1.3; height: 2.6em; color: var(--dim); overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
 
 .btn {
   background: var(--glass-2); border: 1px solid var(--line-2); border-radius: 8px;
@@ -424,6 +430,11 @@ input[type="range"] { width: 100%; accent-color: var(--amber); margin: 4px 0 0; 
 }
 @media (max-width: 1060px) {
   .brand { display: none; }
+  /* The four bottom blocks still fit side by side at 1000 px. */
+  .hud-orders { flex-basis: 258px; }
+  .hud-cmd { flex-basis: 276px; width: 276px; }
+  .cmd-grid { grid-template-columns: repeat(3, 64px); }
+  .cmd-grid.wide { grid-template-columns: repeat(4, 58px); }
 }
 /* ---------- phones ---------- */
 .phone-only { display: none; }

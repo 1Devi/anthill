@@ -111,7 +111,8 @@ for (let i = 0; i < 60 * 60; i++) {
 const pile = wf.foods.find((f) => f.kind === 'surplus');
 assert.ok(pile && pile.owner === pf.id && pile.amount > 5, 'surplus piles up by the entrance');
 assert.ok(Math.hypot(pile.x - pf.x, pile.y - pf.y) < 30, 'surplus pile at the entrance');
-assert.ok(pf.stats.collected - got0 < pile.amount, 'food that did not fit is not counted as gathered');
+// Only the room the colony ate free in the meantime could be filled.
+assert.ok(pf.stats.collected - got0 <= pf.upkeep * 60 * 1.5 + 2, 'food that did not fit is not counted as gathered');
 const saved = ctx.loadWorld(JSON.parse(JSON.stringify(ctx.serializeWorld(wf))));
 assert.strictEqual(saved.foods.find((f) => f.kind === 'surplus').owner, pf.id, 'surplus pile owner is saved');
 const before = pile.amount;
@@ -119,6 +120,30 @@ pf.food = 0;
 for (let i = 0; i < 60 * 20; i++) wf.update(ctx.CFG.TICK);
 assert.ok(!wf.foods.includes(pile) || pile.amount < before - 5, 'surplus is carried in once there is room');
 console.log('surplus OK');
+
+// Meadow objects block ants, survive a save and are not touched by the rock tools.
+const wo = new ctx.World({ difficulty: 'normal', seed: 6 });
+const twig = wo.objects.find((o) => o.type === 'twig');
+assert.ok(twig && wo.isWall(twig.x, twig.y), 'a twig blocks ants');
+wo.paintWalls(twig.x, twig.y, 15, 0);
+assert.ok(wo.isWall(twig.x, twig.y), 'erasing rocks leaves twigs alone');
+const wo2 = ctx.loadWorld(JSON.parse(JSON.stringify(ctx.serializeWorld(wo))));
+assert.strictEqual(wo2.objects.length, wo.objects.length, 'objects are saved');
+// Rain fills puddles that block ants; ants caught in one wade out; dry weather drains them.
+wo.rain = 25;
+wo.nextRain = 999;
+for (let i = 0; i < 60 * 20; i++) wo.update(ctx.CFG.TICK);
+const wetCells = wo.water.reduce((n, v) => n + v, 0);
+assert.ok(wetCells > 0.02 * wo.water.length, 'rain fills puddles');
+const cell = wo.water.indexOf(1), cx = ((cell % wo.gw) + 0.5) * ctx.CFG.CELL, cy = (((cell / wo.gw) | 0) + 0.5) * ctx.CFG.CELL;
+assert.ok(wo.isWall(cx, cy) && !wo.isWall(cx, cy, true), 'puddles block ants but can be waded out of');
+assert.strictEqual(ctx.loadWorld(JSON.parse(JSON.stringify(ctx.serializeWorld(wo)))).water.reduce((n, v) => n + v, 0), wetCells, 'puddles are saved');
+const wading = wo.colonies.reduce((n, c) => n + c.ants.filter((a) => !a.inside && wo.isWet(a.x, a.y)).length, 0);
+assert.ok(wading <= 3, 'ants do not stay in puddles');
+wo.rain = 0;
+for (let i = 0; i < 60 * 80; i++) wo.update(ctx.CFG.TICK);
+assert.strictEqual(wo.water.reduce((n, v) => n + v, 0), 0, 'puddles dry up');
+console.log('objects and puddles OK');
 
 // Version-1 saves (before the maps grew) carry no sizes or map settings: they must load as a 1600x1000
 // meadow with a 1000x640 nest, one rival and the colonies in their old spots.

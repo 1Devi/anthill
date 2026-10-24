@@ -382,7 +382,7 @@ class Game {
         if (w.feedCooldown > 0) {
           this.ui.toast(`Food drop is recharging (${Math.ceil(w.feedCooldown)} s).`, 'warn');
         } else if (w.isWall(m.x, m.y)) {
-          this.ui.toast('Cannot drop food on rocks.', 'warn');
+          this.ui.toast('Cannot drop food on rocks or water.', 'warn');
         } else {
           w.addFood(m.x, m.y, CFG.FEED.amount, 'sugar');
           w.feedCooldown = w.diff.feedCooldown;
