@@ -107,6 +107,9 @@ function serializeWorld(w) {
     ]),
     rain: r2(w.rain),
     nextRain: r2(w.nextRain),
+    dryT: r2(Math.min(w.dryT, 999)),
+    mist: w.mistT && [r2(w.mistT[0]), r2(w.mistT[1])],
+    mistDay: w.mistDay,
     seasonT0: r2(w.seasonT0),
     spiderT: Number.isFinite(w.spiderT) ? r2(w.spiderT) : null,
     foodSpawnT: r2(w.foodSpawnT),
@@ -197,6 +200,11 @@ function loadWorld(data) {
   // Saves from before the seasons start their first spring at the beginning of the day they were loaded on.
   w.seasonT0 = data.seasonT0 ?? Math.floor(data.time / CFG.DAY_LENGTH) * CFG.DAY_LENGTH;
   w.syncSeason();
+  // Saves from before the fog have none until the next morning.
+  w.dryT = data.dryT ?? 999;
+  w.mistT = data.mist || null;
+  w.mistDay = data.mistDay ?? Math.floor(data.time / CFG.DAY_LENGTH + 0.3);
+  w.updateMist(0);
   if (data.history) {
     w.history = data.history;
     w.marks = data.marks || [];

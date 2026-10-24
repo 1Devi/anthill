@@ -38,6 +38,7 @@ w.colonies.forEach((c, i) => {
   assert.strictEqual(Math.round(c2.food), Math.round(c.food), 'food');
   assert.strictEqual(c2.counts.inside, c.counts.inside, 'inside');
   assert.ok(Math.abs(sum(c2.foodP.d) - sum(c.foodP.d)) / Math.max(1, sum(c.foodP.d)) < 0.02, 'food pheromone');
+  assert.strictEqual(c2.moundLevel, c.moundLevel, 'mound size');
   if (c.nest) {
     // Compare as JSON: objects from the vm context and the main realm have different prototypes.
     assert.strictEqual(JSON.stringify(c2.nest.caps), JSON.stringify(c.nest.caps), 'caps');
@@ -145,6 +146,50 @@ for (let i = 0; i < 60 * 80; i++) wo.update(ctx.CFG.TICK);
 assert.strictEqual(wo.water.reduce((n, v) => n + v, 0), 0, 'puddles dry up');
 console.log('objects and puddles OK');
 
+// Morning fog: some mornings only, gone by late morning; it shortens smell and sight, is saved, and rain clears it.
+const wz = new ctx.World({ difficulty: 'normal', seed: 8 }), L = ctx.CFG.DAY_LENGTH;
+wz.nextRain = 1e9;
+const foggyDays = new Set(), foggyHours = new Set();
+for (let d = 1; d <= 400; d++) {
+  for (let hr = 0; hr < 24; hr += 0.25) {
+    wz.time = (d - 0.3 + hr / 24) * L;
+    wz.updateMist(L / 96);
+    if (wz.mist > 0) {
+      foggyDays.add(d);
+      foggyHours.add(Math.floor(hr));
+    }
+  }
+}
+const share = foggyDays.size / 400, spring = ctx.CFG.SEASONS[0].mist;
+assert.ok(Math.abs(share - spring) < 0.1, `fog on ${(share * 100).toFixed(0)}% of spring mornings`);
+assert.ok(Math.min(...foggyHours) >= 3 && Math.max(...foggyHours) <= 11, 'fog only in the morning');
+wz.time = 400.5 * L; // the morning of the last day rolled above
+wz.mistT = [wz.time - 30, wz.time + 30];
+wz.updateMist(0);
+assert.ok(wz.mist === 1 && Math.abs(wz.senseMul - ctx.CFG.MIST.sense) < 1e-9 && Math.abs(wz.sightMul - ctx.CFG.MIST.sight) < 1e-9, 'fog shortens smell and sight');
+const wz2 = ctx.loadWorld(JSON.parse(JSON.stringify(ctx.serializeWorld(wz))));
+assert.ok(wz2.mist === 1 && wz2.mistT[1] === wz.mistT[1] && wz2.mistDay === wz.mistDay, 'fog is saved');
+wz.rain = 20;
+for (let i = 0; i < 60 * 10; i++) wz.update(ctx.CFG.TICK);
+assert.ok(wz.mist === 0 && wz.senseMul === 1 && !wz.mistT, 'rain clears the fog');
+console.log('fog OK');
+
+// The mound over a nest grows a level per chamber beyond the first two (a rival's per growth step), and
+// clicks on a bigger mound select the colony further out.
+const wq = new ctx.World({ difficulty: 'normal', seed: 3 }), pq = wq.player, rq = wq.rival;
+assert.ok(pq.moundLevel === 0 && rq.moundLevel === 0, 'new nests have small mounds');
+const pick = () => wq.pickAt(pq.x + 30, pq.y);
+assert.ok(!pick() || pick().type !== 'colony', 'a small mound is clicked near its middle');
+for (let i = 0; i < 3; i++) pq.nest.makeChamber('storage', pq.nest.chambers[0].x - 300 + i * 120, 500, pq.nest.chambers[0]).built = true;
+assert.strictEqual(pq.moundLevel, 3, 'dug chambers raise the mound');
+assert.ok(pick() && pick().type === 'colony' && pick().obj === pq, 'a bigger mound is clicked further out');
+rq.aiCaps.pop += 80;
+rq.aiCaps.food += 200;
+assert.strictEqual(rq.moundLevel, 3, 'rival growth raises its mound');
+rq.aiCaps.food += 200 * 20;
+assert.strictEqual(rq.moundLevel, ctx.CFG.MOUND.levels, 'mounds stop growing');
+console.log('mounds OK');
+
 // Version-1 saves (before the maps grew) carry no sizes or map settings: they must load as a 1600x1000
 // meadow with a 1000x640 nest, one rival and the colonies in their old spots.
 const legacy = new ctx.World({ difficulty: 'normal', seed: 7, W: 1600, H: 1000 });
@@ -154,6 +199,9 @@ delete old.W;
 delete old.H;
 delete old.settings;
 delete old.seasonT0;
+delete old.dryT;
+delete old.mist;
+delete old.mistDay;
 for (const c of old.colonies) {
   delete c.x;
   delete c.y;
@@ -172,5 +220,6 @@ assert.strictEqual(w3.rivals.length, 1, 'legacy saves have one rival');
 assert.strictEqual(w3.settings.size, 'small', 'legacy map counts as small');
 assert.strictEqual(w3.seasonT0, Math.floor(legacy.time / ctx.CFG.DAY_LENGTH) * ctx.CFG.DAY_LENGTH, 'legacy seasons start on load');
 assert.strictEqual(w3.season.id, 'spring', 'legacy saves start in spring');
+assert.ok(w3.mist === 0 && w3.mistDay === Math.floor(legacy.time / ctx.CFG.DAY_LENGTH + 0.3), 'legacy saves have no fog until the next morning');
 for (let i = 0; i < 600; i++) w3.update(ctx.CFG.TICK);
 console.log('legacy save OK');

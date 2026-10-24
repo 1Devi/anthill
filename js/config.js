@@ -64,15 +64,21 @@ const CFG = {
   // The year starts in spring; each season lasts SEASON_DAYS days. Fields left out default to 1 / off:
   // regrow (how fast natural food appears), bloom (piles that sprout at once per 1600x1000), rot (share of
   // each natural pile lost per second), speed and upkeep (all ants), lay (the queen's laying speed),
-  // cold (ants far from their nest freeze) and calm (no spiders, no raids).
+  // cold (ants far from their nest freeze) and calm (no spiders, no raids); mist is the chance of a foggy
+  // morning on any one day.
   SEASON_DAYS: 2,
   SEASONS: [
-    { id: 'spring', name: 'Spring', regrow: 1.3, bloom: 2, news: 'Spring has come: the meadow grows food again.' },
-    { id: 'summer', name: 'Summer', news: 'Summer: food is plentiful.' },
-    { id: 'autumn', name: 'Autumn', regrow: 0.55, news: 'Autumn: food grows slowly now. Stock up before winter.' },
-    { id: 'winter', name: 'Winter', regrow: 0, rot: 0.008, speed: 0.6, upkeep: 0.6, lay: 0.4, cold: true, calm: true,
+    { id: 'spring', name: 'Spring', regrow: 1.3, bloom: 2, mist: 0.4, news: 'Spring has come: the meadow grows food again.' },
+    { id: 'summer', name: 'Summer', mist: 0.2, news: 'Summer: food is plentiful.' },
+    { id: 'autumn', name: 'Autumn', regrow: 0.55, mist: 0.5, news: 'Autumn: food grows slowly now. Stock up before winter.' },
+    { id: 'winter', name: 'Winter', regrow: 0, rot: 0.008, speed: 0.6, upkeep: 0.6, lay: 0.4, cold: true, calm: true, mist: 0.15,
       news: 'Winter! Nothing grows, ants are slow and the cold hurts them far from the nest. Spiders and raiders stay away.' },
   ],
+  // Morning fog (mist in the code; fog of war is something else). Rolled at midnight with the season's chance,
+  // plus afterRain if it rained in the last half day; it comes in between the start hours, lifts between the
+  // end hours and fades in and out over fade hours. Rain clears it. At full density ants smell food only
+  // sense of the usual distance, and soldiers and spiders see sight of theirs.
+  MIST: { afterRain: 0.25, start: [4.5, 6.5], end: [8.5, 11], fade: 1.2, sense: 0.7, sight: 0.65 },
   COLD: { range: 240, dmg: 0.12 }, // in winter, ants farther than range from their nest lose dmg HP per second
   WINTER_STOCK: 0.8, // eggs leave food for the winter alone, up to this share of the storage capacity
 
@@ -92,6 +98,9 @@ const CFG = {
   CARRY: 1,
   CORPSE_FOOD: 2,
   NEST_R: 16,
+  // The mound over a nest grows a level per chamber dug beyond the first two (a rival, per growth step), up
+  // to levels; its radius on the meadow is r plus grow per level. Only its looks and click area change.
+  MOUND: { r: 34, grow: 3, levels: 10 },
   PATROL_R: 120,
   SOLDIER_SENSE: 75,
   RAID_DMG: 0.18, // share of a raider's bite that reaches the queen through the nest entrance

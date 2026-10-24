@@ -361,6 +361,10 @@ class UI {
     if (d.cold) fx.push(`Ants more than ${CFG.COLD.range} steps from the nest freeze.`);
     if (d.calm) fx.push('No spiders and no raids.');
     if (!fx.length) fx.push('Plenty of food, nothing special.');
+    if (d.mist >= 0.35) fx.push('Foggy mornings are common.');
+    if (w.mist > 0.15) {
+      fx.push(`<b>Fog now:</b> ants smell food ${pct(w.senseMul)} less far, soldiers and spiders see ${pct(w.sightMul)} less far.`);
+    }
     return this.tipRows(`${d.name}, year ${s.year}`, [
       ['Day', `${w.dayInfo().day}`],
       [`${s.next.name} in`, fmtTime(s.left)],
@@ -639,7 +643,9 @@ class UI {
     const w = this.g.world, p = w.player, n = p.counts, caps = p.caps, f = p.flows();
     const day = w.dayInfo();
     this.$('clock').textContent = `Day ${day.day} · ${String(day.hour).padStart(2, '0')}:${String(day.minute).padStart(2, '0')}`;
-    this.$('weather').textContent = w.rain > 0 ? (w.season.cold ? 'Snow' : 'Rain') : day.night > 0.5 ? 'Night' : '';
+    const weather = this.$('weather'), fog = w.rain <= 0 && w.mist > 0.15;
+    weather.textContent = w.rain > 0 ? (w.season.cold ? 'Snow' : 'Rain') : fog ? 'Fog' : day.night > 0.5 ? 'Night' : '';
+    weather.classList.toggle('fog', fog);
     const season = this.$('season');
     season.textContent = w.season.name;
     season.className = w.season.id;

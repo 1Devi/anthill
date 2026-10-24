@@ -7,6 +7,8 @@ const newLedger = () => ({ gathered: 0, farmed: 0, eaten: 0, eggs: 0, digging: 0
 const BASE_MODS = { dmg: 1, hp: 1, soldier: 1, speed: 1, sense: 1, trail: 1, carry: 1, lay: 1, dev: 1, life: 1, dig: 1, farm: 1, zone: 0 };
 const RESEARCH_BY_ID = Object.fromEntries(CFG.RESEARCH.map((r) => [r.id, r]));
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
+// A rival has no nest: it starts with these capacities and adds a step of one of them now and then.
+const AI_CAPS = { food: 250, brood: 8, pop: 40 }, AI_STEP = { food: 200, brood: 8, pop: 40 };
 
 function techName(id, level) {
   const r = RESEARCH_BY_ID[id];
@@ -58,7 +60,7 @@ class Colony {
     this.researching = null; // { id, t, total }
     this.mods = { ...BASE_MODS };
     this.nest = this.isPlayer ? new Nest(this) : null;
-    this.aiCaps = { food: 250, brood: 8, pop: 40 };
+    this.aiCaps = { ...AI_CAPS };
     this.aiT = 2;
     this.aiGrowT = 40;
     this.aiResearchT = o.researchEvery || Infinity;
@@ -71,6 +73,17 @@ class Colony {
 
   get caps() {
     return this.nest ? this.nest.caps : this.aiCaps;
+  }
+
+  // How far the mound over the nest has grown: a level per chamber beyond the first two, or per rival growth step.
+  get moundLevel() {
+    const n = this.nest ? this.nest.chambers.filter((c) => c.built && c.type !== 'entrance').length - 2
+      : Object.keys(AI_CAPS).reduce((s, k) => s + (this.aiCaps[k] - AI_CAPS[k]) / AI_STEP[k], 0);
+    return clamp(Math.round(n), 0, CFG.MOUND.levels);
+  }
+
+  get moundR() {
+    return CFG.MOUND.r + this.moundLevel * CFG.MOUND.grow;
   }
 
   // Steps (grid cells) from every free cell to the nest around rocks, objects and puddles, for soldiers
@@ -552,9 +565,9 @@ class Colony {
       this.aiGrowT = 25;
       this.food -= 25;
       const c = this.aiCaps;
-      if (this.ants.length + this.brood.length >= c.pop - 5) c.pop += 40;
-      else if (this.brood.length >= c.brood - 1) c.brood += 8;
-      else c.food += 200;
+      if (this.ants.length + this.brood.length >= c.pop - 5) c.pop += AI_STEP.pop;
+      else if (this.brood.length >= c.brood - 1) c.brood += AI_STEP.brood;
+      else c.food += AI_STEP.food;
     }
 
     // The rival has no nest to research in; it simply learns a random upgrade every so often.

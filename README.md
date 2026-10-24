@@ -80,6 +80,11 @@ by little as they dig.
 You can only dig close to the existing tunnels and inside the lit area — research **Deep Tunnels**
 to open up more of the underground.
 
+Every chamber you dig piles more soil over the entrance, so the **mound** grows with the nest — in the
+cross-section and out on the meadow, where a big colony's mound is wide and tall, with side entrances
+and bits of straw and twigs dragged onto it. Rival mounds grow the same way as their colonies do, so
+a glance at one tells you how strong it has become.
+
 ## Research
 
 Build a **Scent Hall**, then press **R**. Twelve upgrades in four groups, many with several levels:
@@ -125,6 +130,9 @@ The **Colony orders** panel at the bottom sets how the colony behaves:
   clash when paths cross, and now and then one rival raids another instead of you — a good moment
   to strike the weakened one.
 - **Night** falls every couple of minutes; **rain** washes away the scent trails (in winter it snows).
+- **Fog** lies on the meadow some mornings — most often in spring and autumn, and after a rainy day —
+  and lifts by mid-morning; rain clears it at once. While it lasts, ants only smell food close by, and
+  soldiers and spiders can't see as far. A message tells you when it rolls in.
 - **Puddles** gather in the low spots of the meadow while it rains, and after the spring thaw. Ants
   can't cross them, and food under water is out of reach until it dries up — usually within a minute.
 
@@ -144,9 +152,9 @@ season is shown above the clock at the top — hover it to see what it changes.
 
 | Season | What changes |
 | --- | --- |
-| **Spring** | Fresh food sprouts across the meadow and grows back fast. |
+| **Spring** | Fresh food sprouts across the meadow and grows back fast. Foggy mornings are common. |
 | **Summer** | Plenty of food. |
-| **Autumn** | Food grows slowly. The colony starts putting food aside for the winter, so the queen lays fewer eggs. |
+| **Autumn** | Food grows slowly. The colony starts putting food aside for the winter, so the queen lays fewer eggs. Foggy mornings are common. |
 | **Winter** | Snow. Nothing grows, and the seeds and berries left on the meadow rot. Ants crawl, eat less and freeze if they wander far from the nest; the queen lays slowly. Spiders and raiders stay away. |
 
 The colony lives through the winter on its stores, and it can only keep as much as your storage
@@ -226,6 +234,8 @@ What's coming next, roughly in this order:
   up to three rival colonies.
 - [x] **Seasons and winter** — plenty of food in spring and summer, less in autumn; in winter
   nothing grows and the colony lives on its stores.
+- [x] **Morning fog** — some mornings fog lies on the meadow, and ants smell food and spot enemies
+  only from closer by.
 - [ ] **Scouts** — a fast new caste that explores far away and marks the food it finds.
 - [ ] **Fog of war** — you only see what your ants see. Scouts and patrols become essential.
 - [ ] **Aphids and ladybugs** — herd aphids on plants and milk them for honeydew; defend them from

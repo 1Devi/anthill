@@ -51,6 +51,19 @@ spring. `Colony.winterStock()` keeps food back from eggs through autumn and wint
 `CFG.WINTER_STOCK` of the storage. On screen, `seasonLook()` in `render-surface.js` gives the colour
 wash and snow depth shared by the meadow, the minimap and the nest view.
 
+## Morning fog
+
+The code calls it `mist`, so it doesn't clash with the planned fog of war. `World.updateMist()` rolls once
+a day at midnight: with the season's `mist` chance, plus `CFG.MIST.afterRain` if it rained in the last half
+day (`dryT`, seconds since rain), `w.mistT` becomes `[comes, lifts]` in game seconds, hours picked from
+`CFG.MIST.start` and `end`. Rain cancels a fog that hasn't come yet and lifts one that has. `mistLevel()`
+gives the density `w.mist` (0..1), eased over `fade` hours, and from it `w.senseMul` and `w.sightMul`,
+which scale `CFG.FOOD_SENSE` (ants) and `CFG.SOLDIER_SENSE` and `CFG.SPIDER.sense`. Saves keep `mist`
+(`mistT`), `mistDay` and `dryT`; older saves get no fog until the next morning. On screen,
+`SurfaceRenderer.drawMist()` lays a haze and two drifting layers of one seamless tile pattern over the
+ants (before the night overlay), the minimap gets a light wash, and the nest view pales its sky and
+draws `drawGroundMist()` over the grass.
+
 ## Meadow objects and puddles
 
 The wall grid holds a material per cell: 0 free, 1 rock (the player's rock tools only add and remove
@@ -65,6 +78,19 @@ and spring meltwater and falls in dry weather; `flood()` refills `w.water` whene
 changes. `isWall()` counts water, except for an ant already standing in it (`wading`), so ants walk
 out of a rising puddle; `nearestFood()` skips food under water. Saves keep only `wet`. The renderer
 draws puddles from the same smooth field, so shores look round while the grid stays coarse.
+
+## Nest mounds
+
+`Colony.moundLevel` (0..`CFG.MOUND.levels`) is a level per built chamber beyond the starting two; a
+rival has no nest, so each growth step of its `aiCaps` (`AI_STEP` in `colony.js`) counts as a chamber.
+Nothing is saved for it: chambers and `aiCaps` already are. `Colony.moundR` is the mound's radius on the
+meadow (`CFG.MOUND.r` plus `grow` per level). The nest view draws `moundSprite(level)` from the same
+level; on the surface `SurfaceRenderer.moundSprite(col)` caches one sprite per palette and level, made by
+`makeMound()`. Each kind of detail there (crumbs, straw and twigs, side entrances) has its own seeded
+sequence, so a mound keeps its look as it grows. Only looks change: ants still enter within `CFG.NEST_R`.
+`World.pickAt()` selects a colony within `0.76 × moundR`, but a food pile under the cursor wins outside
+the old 26-unit middle; the selection ring, the raid ring, the queen's health bar and the night glow
+scale with `moundR` too.
 
 ## Food and soldiers
 
@@ -110,8 +136,10 @@ node tests/save-test.js
 Checks that a save loads back identically, including research, map options (a large map with
 three rivals) and the season, that winter arrives on time (spiders leave, ants slow down, seeds rot),
 that food left over at full stores piles up by the entrance and is carried in later, that meadow
-objects block ants and survive saves, that rain puddles block ants and dry up, and that old-format
-saves (smaller map, no sizes, map options or seasons stored) still load.
+objects block ants and survive saves, that rain puddles block ants and dry up, that mounds grow with
+dug chambers and rival growth and are clicked further out, that morning fog comes on about the right
+share of mornings, only in the morning, shortens smell and sight, is saved and is cleared by rain, and
+that old-format saves (smaller map, no sizes, map options, seasons or fog stored) still load.
 
 ## Deploying
 

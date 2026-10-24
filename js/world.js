@@ -73,7 +73,7 @@ class PheroMap {
 }
 
 // Seasons with their defaults filled in.
-const SEASONS = CFG.SEASONS.map((s) => ({ regrow: 1, bloom: 0, rot: 0, speed: 1, upkeep: 1, lay: 1, cold: false, calm: false, ...s }));
+const SEASONS = CFG.SEASONS.map((s) => ({ regrow: 1, bloom: 0, rot: 0, speed: 1, upkeep: 1, lay: 1, cold: false, calm: false, mist: 0, ...s }));
 const NATURAL_FOOD = new Set(['seeds', 'berries', 'fruit', 'beetle']);
 // Wall grid values: empty ground, rock (the player can add and erase it) and objects (twigs, cones, mushrooms).
 const ROCK = 1, OBJECT = 2;
@@ -182,6 +182,12 @@ class World {
     this.hash = new SpatialHash(this.W, this.H, 24);
     this.rain = 0;
     this.nextRain = rand(200, 340);
+    this.dryT = 999; // seconds since it last rained
+    this.mist = 0; // morning fog density, 0..1
+    this.mistT = null; // [comes, lifts] of today's fog in game seconds
+    this.mistDay = 0; // the last day rolled for fog: the first morning is already over
+    this.senseMul = 1; // fog shortens how far ants smell food...
+    this.sightMul = 1; // ...and how far soldiers and spiders see
     this.seasonT0 = 0; // when the first spring began (older saves start their seasons when loaded)
     this.season = SEASONS[0];
     this.seasonIdx = 0;
@@ -486,9 +492,11 @@ class World {
       }
     });
     if (best) return best.isSpider ? { type: 'spider', obj: best } : { type: 'ant', obj: best };
-    for (const c of this.colonies) if (dist(x, y, c.x, c.y) < 26) return { type: 'colony', obj: c };
-    for (const f of this.foods) if (dist(x, y, f.x, f.y) < f.r0 + 5) return { type: 'food', obj: f };
-    return null;
+    // The middle of a nest beats a food pile; the rest of a grown mound only counts where there is none.
+    const food = this.foods.find((f) => dist(x, y, f.x, f.y) < f.r0 + 5);
+    const col = this.colonies.find((c) => dist(x, y, c.x, c.y) < (food ? 26 : c.moundR * 0.76));
+    if (col) return { type: 'colony', obj: col };
+    return food ? { type: 'food', obj: food } : null;
   }
 
   // The season now: which one, how far into it (0..1), seconds left and the year.
@@ -719,8 +727,40 @@ class World {
         this.log(season.cold ? 'A snowstorm! Trails are buried under the snow.' : 'Rain! Pheromone trails are washing away.', 'warn');
       }
     }
+    this.updateMist(dt);
     this.speedMul = (this.rain > 0 ? 0.85 : 1) * season.speed;
     if (this.feedCooldown > 0) this.feedCooldown -= dt;
+  }
+
+  // Morning fog: rolled once a day at midnight, likelier after rain. Rain clears it.
+  updateMist(dt) {
+    const M = CFG.MIST, L = CFG.DAY_LENGTH, h = L / 24, day = Math.floor(this.time / L + 0.3);
+    this.dryT = this.rain > 0 ? 0 : this.dryT + dt;
+    if (day !== this.mistDay) {
+      this.mistDay = day;
+      const p = this.season.mist + (this.dryT < L / 2 ? M.afterRain : 0), t = (day - 0.3) * L;
+      this.mistT = chance(p) ? [t + rand(M.start[0], M.start[1]) * h, t + rand(M.end[0], M.end[1]) * h] : null;
+    }
+    if (this.mistT && this.rain > 0) {
+      const [a, b] = this.mistT, f = M.fade * h;
+      if (this.time < a) this.mistT = null;
+      else this.mistT[1] = Math.min(b, this.time + Math.min(this.time - a, b - this.time, f));
+    }
+    const was = this.mist;
+    this.mist = this.mistLevel();
+    if (this.mistT && this.time >= this.mistT[1]) this.mistT = null;
+    if (was === 0 && this.mist > 0) {
+      this.log(`${this.season.cold ? 'Freezing fog' : 'Morning fog'}: ants smell food only close by, and soldiers and spiders can't see far.`, 'info');
+    }
+    this.senseMul = lerp(1, M.sense, this.mist);
+    this.sightMul = lerp(1, M.sight, this.mist);
+  }
+
+  // Fog density now: eased in after it comes and out before it lifts.
+  mistLevel() {
+    if (!this.mistT) return 0;
+    const [a, b] = this.mistT, k = clamp(Math.min(this.time - a, b - this.time) / (CFG.MIST.fade * CFG.DAY_LENGTH / 24), 0, 1);
+    return k * k * (3 - 2 * k);
   }
 
   // Winter cold: ants far from their own nest slowly lose health.

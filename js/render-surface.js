@@ -6,6 +6,7 @@ const SNOW_Q = 3; // world units per pixel of the snow cover
 const OS = 4; // pixels per world unit for cached object sprites
 const SNOW_LEVELS = 4; // snow cover is drawn from this many depths, from a few drifts to a full blanket
 const FS = 4; // pixels per world unit for cached food piles
+const MIST_TILE = 700; // world units covered by one tile of drifting fog banks
 
 const PHERO_COLORS = {
   home: [90, 160, 255],
@@ -74,7 +75,7 @@ class SurfaceRenderer {
     this.psctx = this.psoft.getContext('2d');
     this.psctx.filter = 'blur(0.7px)';
     this.foodCache.clear();
-    this.mounds = new Map(w.colonies.map((c) => [c, this.makeMound(c)]));
+    this.mounds = new Map(); // by palette and level, made when first needed
     this.snowField = null; // made the first time snow falls
     this.snowLevels = [];
     this.objCache.clear();
@@ -85,6 +86,7 @@ class SurfaceRenderer {
     this.waterLevel = -1;
     this.wetCells = [];
     this.ripples.length = 0;
+    this.mistPattern = null; // made the first time fog comes in
   }
 
   // ---------- meadow objects ----------
@@ -576,38 +578,79 @@ class SurfaceRenderer {
     ctx.restore();
   }
 
-  makeMound(col) {
-    const R = 34, size = R * 2 * FS;
+  // The mound over a nest, cached per palette and level: it grows with the colony (Colony.moundLevel).
+  moundSprite(col) {
+    const level = col.moundLevel, key = `${col.palette}:${level}`;
+    let m = this.mounds.get(key);
+    if (!m) this.mounds.set(key, (m = this.makeMound(col.palette, level)));
+    return m;
+  }
+
+  // A heap of dug-out soil, lit from the upper left. Each kind of detail has its own seeded sequence, so a
+  // mound keeps its look as it grows: wider, taller, more crumbs, side entrances, bits of twig and straw.
+  makeMound(palette, level) {
+    const R = CFG.MOUND.r + level * CFG.MOUND.grow, h = level / CFG.MOUND.levels, size = Math.ceil(R * 2 * FS);
     const c = document.createElement('canvas');
     c.width = c.height = size;
     const ctx = c.getContext('2d');
     ctx.scale(FS, FS);
     ctx.translate(R, R);
-    const g = ctx.createRadialGradient(0, 0, 6, 0, 0, R);
-    g.addColorStop(0, 'rgba(150,118,78,1)');
-    g.addColorStop(0.55, 'rgba(160,128,86,0.9)');
-    g.addColorStop(1, 'rgba(150,120,80,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(0, 0, R, 0, TAU);
-    ctx.fill();
-    const tint = Sprites.PAL[col.palette].mound;
-    for (let i = 0; i < 700; i++) {
-      const a = rand(0, TAU), d = 7 + Math.pow(Math.random(), 0.7) * (R - 9);
-      const v = rand(-30, 40);
-      ctx.fillStyle = `rgba(${(tint[0] + v + 60) | 0},${(tint[1] + v + 50) | 0},${(tint[2] + v + 30) | 0},${rand(0.4, 0.9)})`;
+    const tint = Sprites.PAL[palette].mound, seed = [...palette].reduce((s, ch) => s * 31 + ch.charCodeAt(0), 7);
+    const soil = (v, a) => `rgba(${(tint[0] + v + 60) | 0},${(tint[1] + v + 50) | 0},${(tint[2] + v + 30) | 0},${a})`;
+    const disc = (x, y, r0, r1, stops) => {
+      const g = ctx.createRadialGradient(x, y, r0, x, y, r1);
+      for (const [t, col] of stops) g.addColorStop(t, col);
+      ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(Math.cos(a) * d, Math.sin(a) * d, rand(0.3, 0.9), 0, TAU);
+      ctx.arc(x, y, r1, 0, TAU);
+      ctx.fill();
+    };
+    // A tall heap casts a soft shadow down and to the right.
+    if (h > 0) disc(R * 0.07 * h, R * 0.09 * h, R * 0.4, R * 0.93, [[0, `rgba(25,16,8,${0.25 * h})`], [1, 'rgba(25,16,8,0)']]);
+    // Loose soil: plain brown with a touch of the colony's own tint.
+    const mix = [150, 118, 78].map((b, i) => lerp(b, tint[i] + [40, 35, 25][i], 0.35));
+    const base = (v, a) => `rgba(${mix.map((x) => (x + v) | 0).join(',')},${a})`;
+    disc(0, 0, 6, R, [[0, base(0, 1)], [0.55, base(8, 0.9)], [1, base(0, 0)]]);
+    let rng = mulberry32(seed);
+    const crumbs = Math.round(700 * (R / CFG.MOUND.r) ** 2);
+    for (let i = 0; i < crumbs; i++) {
+      const a = rng() * TAU, d = 7 + Math.pow(rng(), 0.7) * (R - 9), v = -30 + rng() * 70;
+      ctx.fillStyle = soil(v, 0.4 + rng() * 0.5);
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * d, Math.sin(a) * d, 0.3 + rng() * 0.6, 0, TAU);
       ctx.fill();
     }
-    const h = ctx.createRadialGradient(0, 0, 0, 0, 0, 9);
-    h.addColorStop(0, '#000');
-    h.addColorStop(0.6, '#120b06');
-    h.addColorStop(1, 'rgba(40,28,16,0)');
-    ctx.fillStyle = h;
-    ctx.beginPath();
-    ctx.arc(0, 0, 9, 0, TAU);
-    ctx.fill();
+    // Bits of straw, pine needles and twigs dragged onto the heap.
+    rng = mulberry32(seed ^ 0x51ed);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < level * 9; i++) {
+      const a = rng() * TAU, d = (0.3 + rng() * 0.62) * R, ang = rng() * TAU, kind = rng(), len = 2.5 + rng() * 4.5, shade = rng();
+      const twig = kind > 0.82, l = twig ? len * 1.4 : len, x = Math.cos(a) * d, y = Math.sin(a) * d;
+      ctx.strokeStyle = twig ? (shade < 0.5 ? '#4e3420' : '#5d4027') : kind < 0.45 ? (shade < 0.5 ? '#d2b46a' : '#bfa055') : shade < 0.5 ? '#8a6236' : '#6e4c2a';
+      ctx.lineWidth = twig ? 0.95 : kind < 0.45 ? 0.6 : 0.42;
+      ctx.beginPath();
+      ctx.moveTo(x - (Math.cos(ang) * l) / 2, y - (Math.sin(ang) * l) / 2);
+      ctx.lineTo(x + (Math.cos(ang) * l) / 2, y + (Math.sin(ang) * l) / 2);
+      ctx.stroke();
+    }
+    // Light and shade round the dome, stronger as it rises; only on the heap itself.
+    ctx.globalCompositeOperation = 'source-atop';
+    disc(-R * 0.32, -R * 0.36, 0, R * 0.95, [[0, `rgba(255,238,205,${0.12 + 0.2 * h})`], [1, 'rgba(255,238,205,0)']]);
+    disc(R * 0.36, R * 0.4, 0, R * 0.9, [[0, `rgba(45,28,12,${0.1 + 0.32 * h})`], [1, 'rgba(45,28,12,0)']]);
+    ctx.globalCompositeOperation = 'source-over';
+    // Side entrances: one more every three levels, each with a spill of fresh soil.
+    rng = mulberry32(seed ^ 0xbeef);
+    const a0 = rng() * TAU;
+    for (let k = 0; k < Math.floor(level / 3); k++) {
+      const a = a0 + (k * TAU) / 3 + (rng() - 0.5) * 0.8, d = (0.5 + rng() * 0.15) * R, r = 2.6 + rng() * 0.8;
+      const x = Math.cos(a) * d, y = Math.sin(a) * d;
+      disc(x + Math.cos(a) * r * 0.8, y + Math.sin(a) * r * 0.8, 0, r * 2.3, [[0, soil(28, 0.55)], [1, soil(20, 0)]]);
+      disc(x, y, 0, r * 1.3, [[0, '#0a0603'], [0.6, '#1a100a'], [1, 'rgba(40,28,16,0)']]);
+    }
+    // The main entrance in a rim of fresh soil.
+    const rim = 15 + level * 0.5;
+    disc(0, 0, 0, rim, [[0.45, soil(30, 0)], [0.68, soil(28, 0.5)], [1, soil(20, 0)]]);
+    disc(0, 0, 0, 9, [[0, '#000'], [0.6, '#120b06'], [1, 'rgba(40,28,16,0)']]);
     return { canvas: c, R };
   }
 
@@ -834,7 +877,7 @@ class SurfaceRenderer {
     }
 
     for (const c of w.colonies) {
-      const m = this.mounds.get(c);
+      const m = this.moundSprite(c);
       ctx.drawImage(m.canvas, c.x - m.R, c.y - m.R, m.R * 2, m.R * 2);
     }
 
@@ -851,6 +894,8 @@ class SurfaceRenderer {
     this.drawAnts(ctx, g, z, ox, oy, inView);
     ctx.setTransform(z, 0, 0, z, ox, oy);
     for (const s of w.spiders) if (inView(s.x, s.y)) this.drawSpider(ctx, s);
+    // Fog shows less before sunrise, with little light to catch.
+    if (w.mist > 0.005) this.drawMist(ctx, view, w.mist * (0.6 + 0.4 * day.light));
 
     // Night darkens everything; trails get a second faint pass on top so they glow in the dark.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -861,11 +906,11 @@ class SurfaceRenderer {
     ctx.setTransform(z, 0, 0, z, ox, oy);
     if (day.night > 0.2) {
       for (const c of w.colonies) {
-        const gl = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 40);
+        const r = c.moundR * 1.18, gl = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
         gl.addColorStop(0, `rgba(255,190,110,${0.18 * day.night})`);
         gl.addColorStop(1, 'rgba(255,190,110,0)');
         ctx.fillStyle = gl;
-        ctx.fillRect(c.x - 40, c.y - 40, 80, 80);
+        ctx.fillRect(c.x - r, c.y - r, r * 2, r * 2);
       }
     }
 
@@ -985,10 +1030,10 @@ class SurfaceRenderer {
         ctx.strokeStyle = `rgba(255,60,40,${0.4 + p * 0.5})`;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(c.x, c.y, 26 + p * 4, 0, TAU);
+        ctx.arc(c.x, c.y, c.moundR * 0.76 + p * 4, 0, TAU);
         ctx.stroke();
       }
-      if (c.queen.hp < c.queen.maxHp && c.alive) this.bar(ctx, c.x, c.y - 34, 36, c.queen.hp / c.queen.maxHp, c.isPlayer ? '#7fd36b' : '#e0543a');
+      if (c.queen.hp < c.queen.maxHp && c.alive) this.bar(ctx, c.x, c.y - c.moundR, 36, c.queen.hp / c.queen.maxHp, c.isPlayer ? '#7fd36b' : '#e0543a');
       if (!c.alive) {
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.beginPath();
@@ -1003,7 +1048,7 @@ class SurfaceRenderer {
     const sel = g.selected;
     if (sel && !sel.obj.dead && !(sel.obj.inside)) {
       const o = sel.obj;
-      const r = sel.type === 'spider' ? o.r * 2.6 : sel.type === 'food' ? o.r0 + 5 : sel.type === 'colony' ? 30 : o.len * 0.9 + 3;
+      const r = sel.type === 'spider' ? o.r * 2.6 : sel.type === 'food' ? o.r0 + 5 : sel.type === 'colony' ? o.moundR * 0.88 : o.len * 0.9 + 3;
       ctx.strokeStyle = 'rgba(255,255,255,0.85)';
       ctx.lineWidth = 1.2 / g.cam.zoom;
       ctx.setLineDash([3 / g.cam.zoom, 3 / g.cam.zoom]);
@@ -1055,6 +1100,50 @@ class SurfaceRenderer {
     ctx.beginPath();
     ctx.ellipse(x, y, 10, 5, 0, 0, TAU);
     ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // A seamless tile of soft fog banks: wide, blurry blobs that wrap around the edges.
+  makeMistTile() {
+    const S = 256, c = document.createElement('canvas');
+    c.width = c.height = S;
+    const ctx = c.getContext('2d'), rng = mulberry32(0xf09);
+    for (let i = 0; i < 40; i++) {
+      const x = rng() * S, y = rng() * S, r = S * (0.1 + rng() * 0.22), a = 0.06 + rng() * 0.12, flat = 0.4 + rng() * 0.25;
+      for (const dx of [-S, 0, S]) {
+        for (const dy of [-S, 0, S]) {
+          if (x + dx + r < 0 || x + dx - r > S || y + dy + r * flat < 0 || y + dy - r * flat > S) continue;
+          ctx.setTransform(1, 0, 0, flat, x + dx, y + dy);
+          const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+          g.addColorStop(0, `rgba(238,241,242,${a})`);
+          g.addColorStop(0.6, `rgba(238,241,242,${a * 0.45})`);
+          g.addColorStop(1, 'rgba(238,241,242,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(-r, -r, r * 2, r * 2);
+        }
+      }
+    }
+    return c;
+  }
+
+  // Morning fog over the meadow: a light haze and two layers of banks drifting with the breeze. Drawn over the
+  // ants, so they walk in it, but thin enough to keep them in sight; the night overlay darkens it at dawn.
+  drawMist(ctx, view, amount) {
+    const w = this.w;
+    if (!this.mistPattern) {
+      this.mistTile = this.makeMistTile();
+      this.mistPattern = ctx.createPattern(this.mistTile, 'repeat');
+    }
+    const x0 = Math.max(0, view.x0), y0 = Math.max(0, view.y0), x1 = Math.min(w.W, view.x1), y1 = Math.min(w.H, view.y1);
+    ctx.fillStyle = `rgba(226,231,234,${0.14 * amount})`;
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.fillStyle = this.mistPattern;
+    for (const [size, vx, vy, alpha] of [[MIST_TILE, 7, 1.5, 1], [MIST_TILE * 1.7, -4, 2.5, 0.8]]) {
+      const k = size / this.mistTile.width;
+      this.mistPattern.setTransform(new DOMMatrix([k, 0, 0, k, (w.time * vx) % size, (w.time * vy) % size]));
+      ctx.globalAlpha = amount * alpha;
+      ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    }
     ctx.globalAlpha = 1;
   }
 

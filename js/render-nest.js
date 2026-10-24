@@ -774,7 +774,7 @@ class NestRenderer {
     const top = n.surfaceY;
     ctx.drawImage(this.cav, 0, top * CS, n.W * CS, (n.H - top) * CS, 0, top, n.W, n.H - top);
     this.drawPlanned(ctx, n);
-    this.drawSurface(ctx, n, vis, g.world.dayInfo(), seasonLook(g.world));
+    this.drawSurface(ctx, n, vis, g.world, seasonLook(g.world));
     this.drawZoneEdge(ctx, n, g);
 
     this.drawStores(ctx, n, col);
@@ -840,6 +840,14 @@ class NestRenderer {
       ctx.drawImage(this.cloud, x, c.y, 130 * c.s, 45 * c.s);
     }
     ctx.globalAlpha = 1;
+    // Fog pales the sky, most of all low over the meadow.
+    if (w.mist > 0.01) {
+      const c = this.mistColor(day), haze = ctx.createLinearGradient(0, top, 0, sy);
+      haze.addColorStop(0, `rgba(${c},${0.25 * w.mist})`);
+      haze.addColorStop(1, `rgba(${c},${0.7 * w.mist})`);
+      ctx.fillStyle = haze;
+      ctx.fillRect(vis.left, top, vis.right - vis.left, sy - top);
+    }
     if (look.falling) {
       const n = w.rain > 0 ? 160 : 60, span = vis.right - vis.left + 40, h = sy - top;
       ctx.fillStyle = 'rgba(250,252,255,0.85)';
@@ -882,7 +890,8 @@ class NestRenderer {
   }
 
   // Grass along the surface and the heap of dug-out soil over the entrance.
-  drawSurface(ctx, n, vis, day, look) {
+  drawSurface(ctx, n, vis, w, look) {
+    const day = w.dayInfo();
     const grass = (id) => this.grass[id] || (this.grass[id] = this.makeGrass(n, this.seed, id));
     const layers = look.k < 1 ? [[look.prev, 1], [look.id, look.k]] : [[look.id, 1]];
     for (const [id, a] of layers) {
@@ -892,8 +901,7 @@ class NestRenderer {
       }
     }
     ctx.globalAlpha = 1;
-    const e = n.chambers[0], built = n.chambers.filter((c) => c.built && c.type !== 'entrance').length;
-    const m = this.moundSprite(Math.min(10, Math.max(0, built - 2)));
+    const e = n.chambers[0], m = this.moundSprite(w.player.moundLevel);
     ctx.drawImage(m.canvas, e.x - m.W / 2, n.surfaceY - m.H + 4, m.W, m.H);
     if (look.snow > 0.01) {
       ctx.globalAlpha = look.snow;
@@ -910,6 +918,7 @@ class NestRenderer {
       ctx.fill();
       ctx.globalAlpha = 1;
     }
+    if (w.mist > 0.01) this.drawGroundMist(ctx, n, vis, w, day);
     if (day.night > 0.02) {
       const tint = ctx.createLinearGradient(0, n.surfaceY - 50, 0, n.surfaceY - 20);
       tint.addColorStop(0, 'rgba(8,14,40,0)');
@@ -917,6 +926,33 @@ class NestRenderer {
       ctx.fillStyle = tint;
       ctx.fillRect(vis.left, n.surfaceY - 50, vis.right - vis.left, 54);
     }
+  }
+
+  // Fog in daylight is near white, at dawn a cold grey.
+  mistColor(day) {
+    const dawn = [96, 106, 128], noon = [226, 231, 234];
+    return dawn.map((v, i) => Math.round(lerp(v, noon[i], day.light))).join(',');
+  }
+
+  // Morning fog lying on the grass: a haze thickest at the ground and flat wisps drifting along it.
+  drawGroundMist(ctx, n, vis, w, day) {
+    const c = this.mistColor(day), sy = n.surfaceY, haze = ctx.createLinearGradient(0, sy - 70, 0, sy + 2);
+    haze.addColorStop(0, `rgba(${c},0)`);
+    haze.addColorStop(0.7, `rgba(${c},${0.45 * w.mist})`);
+    haze.addColorStop(1, `rgba(${c},${0.6 * w.mist})`);
+    ctx.fillStyle = haze;
+    ctx.fillRect(vis.left, sy - 70, vis.right - vis.left, 72);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(vis.left, sy - 80, vis.right - vis.left, 81);
+    ctx.clip();
+    ctx.globalAlpha = 0.55 * w.mist * (0.35 + 0.65 * day.light);
+    const span = vis.right - vis.left + 520;
+    for (let i = 0; i < 10; i++) {
+      const x = vis.left - 260 + (((i * 211.7 + w.time * (4 + (i % 3) * 2)) % span) + span) % span;
+      ctx.drawImage(this.cloud, x, sy - 34 + (i % 4) * 7, 260 + (i % 3) * 60, 34);
+    }
+    ctx.restore();
   }
 
   // Chambers ordered but not dug yet: a dashed outline and the planned tunnel.

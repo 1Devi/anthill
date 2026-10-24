@@ -87,6 +87,10 @@ class Minimap {
       this.g.surface.updateWater();
       ctx.drawImage(this.g.surface.water, 0, 0, this.canvas.width, this.canvas.height);
     }
+    if (w.mist > 0.01) {
+      ctx.fillStyle = `rgba(226,231,234,${w.mist * 0.3})`;
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
     ctx.setTransform(k, 0, 0, k, 0, 0);
 
     for (const f of w.foods) {

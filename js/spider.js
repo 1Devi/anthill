@@ -57,9 +57,9 @@ class Spider {
       if (this.x < -30 || this.y < -30 || this.x > w.W + 30 || this.y > w.H + 30) this.gone = true;
     } else {
       if ((w.tick + this.id) % 10 === 0) {
-        const t = this.target;
-        if (!w.targetable(t) || dist2(this.x, this.y, t.x, t.y) > CFG.SPIDER.sense ** 2) {
-          this.target = w.findEnemy(this, CFG.SPIDER.sense);
+        const t = this.target, sense = CFG.SPIDER.sense * w.sightMul;
+        if (!w.targetable(t) || dist2(this.x, this.y, t.x, t.y) > sense ** 2) {
+          this.target = w.findEnemy(this, sense);
         }
       }
       const t = this.target;

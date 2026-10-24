@@ -95,7 +95,7 @@ class Ant {
         this.state = 'return';
         return;
       }
-      const f = w.nearestFood(this.x, this.y, CFG.FOOD_SENSE * col.mods.sense, col);
+      const f = w.nearestFood(this.x, this.y, CFG.FOOD_SENSE * col.mods.sense * w.senseMul, col);
       if (f) {
         if (dist2(this.x, this.y, f.x, f.y) < f.pickR * f.pickR) {
           this.carry = Math.min(CFG.CARRY * col.mods.carry, f.amount);
@@ -202,7 +202,7 @@ class Ant {
       const t = this.target;
       if (!w.targetable(t) || dist2(this.x, this.y, t.x, t.y) > 140 * 140) {
         // Raiders march on the nest and only fight what gets in their way.
-        this.target = w.findEnemy(this, this.raider && col.rally ? 35 : CFG.SOLDIER_SENSE);
+        this.target = w.findEnemy(this, this.raider && col.rally ? 35 : CFG.SOLDIER_SENSE * w.sightMul);
       }
     }
     const t = this.target;

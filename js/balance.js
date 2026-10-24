@@ -9,6 +9,7 @@ const fx = (v, d = 1) => {
 };
 const pct = (v) => `${Math.round(v * 100)}%`;
 const mid = (a) => (a[0] + a[1]) / 2;
+const hhmm = (h) => `${Math.floor(h)}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
 const secs = (s) => (s >= 90 ? `${fx(s / 60)} min` : `${fx(s, 0)} s`);
 
 function modsFor(levelOf) {
@@ -260,12 +261,13 @@ function seasonSection() {
   const len = CFG.SEASON_DAYS * CFG.DAY_LENGTH, x = (v) => (v === 1 ? '—' : `×${v}`);
   const rows = SEASONS.map((s, i) => [s.name, `${secs(i * len)} – ${secs((i + 1) * len)}`, s.regrow ? x(s.regrow) : 'none',
     s.bloom ? `${s.bloom} piles per 1.6 M` : '—', s.rot ? `${pct(s.rot)}/s` : '—', x(s.speed), x(s.upkeep), x(s.lay),
-    s.cold ? `−${CFG.COLD.dmg} HP/s beyond ${CFG.COLD.range}` : '—', s.calm ? 'yes' : '—']);
+    s.cold ? `−${CFG.COLD.dmg} HP/s beyond ${CFG.COLD.range}` : '—', s.calm ? 'yes' : '—', s.mist ? pct(s.mist) : '—']);
   addSection('seasons', 'Seasons', `${CFG.SEASON_DAYS} days (${secs(len)}) each, a year is ${secs(len * SEASONS.length)}. Times are from the start of the game. ` +
     'Regrow scales how fast natural food appears; rot is the share of every seed and berry pile lost per second; ' +
-    'speed, upkeep and laying apply to every colony. Calm: no spiders spawn (those around leave) and no raids start (those under way end).',
+    'speed, upkeep and laying apply to every colony. Calm: no spiders spawn (those around leave) and no raids start (those under way end). ' +
+    `Fog: the chance of a foggy morning, +${pct(CFG.MIST.afterRain)} after rain.`,
   [{ cols: [{ h: 'Season', l: true }, { h: 'First year' }, { h: 'Regrow' }, { h: 'Bloom' }, { h: 'Rot' }, { h: 'Ant speed' }, { h: 'Upkeep' },
-    { h: 'Laying' }, { h: 'Cold' }, { h: 'Calm' }], rows }]);
+    { h: 'Laying' }, { h: 'Cold' }, { h: 'Calm' }, { h: 'Fog' }], rows }]);
 }
 
 // ---------- map options ----------
@@ -325,6 +327,8 @@ function constantsSection() {
       `${pct(f.chance)} of new natural piles in ${f.seasons.join(', ')}; scaled by the Food option`]),
     ['Meadow objects', Object.entries(CFG.OBJECTS).map(([k, o]) => `${o.count} ${k}`).join(', '), 'Per 1.6 M units²; twigs, cones and mushrooms block ants and scale with the Rocks option'],
     ['Puddles', `${pct(CFG.PUDDLES.cover)} of the meadow`, `When fully wet: ${CFG.PUDDLES.fill} s of rain fill them, ${CFG.PUDDLES.dry} s of dry weather drain them; spring meltwater fills them to ${pct(CFG.PUDDLES.melt)}`],
+    ['Morning fog', `${hhmm(CFG.MIST.start[0])}–${hhmm(CFG.MIST.start[1])} till ${hhmm(CFG.MIST.end[0])}–${hhmm(CFG.MIST.end[1])}`,
+      `Smell ×${CFG.MIST.sense}, soldier and spider sight ×${CFG.MIST.sight} at full density; fades over ${CFG.MIST.fade} h; rain clears it`],
     { group: 'Foraging' },
     ['Carry', CFG.CARRY, 'Food per trip (Heavy Loads +50%)'],
     ['Food smell range', CFG.FOOD_SENSE, 'Plus the pile radius'],
